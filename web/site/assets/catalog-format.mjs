@@ -4,6 +4,7 @@
  * No DOM or Node APIs are used here, so the module runs in both environments.
  */
 import { load as yamlLoad, dump as yamlDump } from "./vendor/js-yaml.mjs";
+import { THEME_IDS, APPEARANCE_OPTIONS } from "./themes.mjs";
 
 export const FORMAT_VERSION = 1;
 
@@ -52,12 +53,23 @@ export const DEFAULT_SETTINGS = {
   footerText: "Curated list originally published at",
   sourceLabel: "ShivdaSaj/Sajins-cybersecurity-tools",
   sourceUrl: "https://github.com/ShivdaSaj/Sajins-cybersecurity-tools",
+  // themes & appearance
+  theme: "cyber",
+  themeAuto: true,
+  themeLight: "paper",
+  themesEnabled: THEME_IDS.slice(),
+  themeAllowVisitor: true,
+  fontStyle: "theme",
+  radius: "default",
+  cardStyle: "glass",
+  density: "comfortable",
+  bgEffect: "theme",
+  glow: true,
+  accentOverride: false,
   accent: "#00f0ff",
   accent2: "#7c4dff",
-  defaultTheme: "auto",
   showStats: true,
   showFavicons: true,
-  animatedBackground: true,
   clockEnabled: true,
   defaultTimezone: "",
   clockHour12: false,
@@ -65,7 +77,7 @@ export const DEFAULT_SETTINGS = {
   clockAllowVisitorChange: true,
 };
 
-const SETTING_TYPES = Object.fromEntries(Object.entries(DEFAULT_SETTINGS).map(([k, v]) => [k, typeof v]));
+const SETTING_TYPES = Object.fromEntries(Object.entries(DEFAULT_SETTINGS).map(([k, v]) => [k, Array.isArray(v) ? "array" : typeof v]));
 
 /* ---------------- helpers ---------------- */
 
@@ -184,15 +196,27 @@ export function normalizeGroups(raw) {
 }
 
 export function normalizeSettings(raw = {}) {
-  const s = { ...DEFAULT_SETTINGS };
+  const s = { ...DEFAULT_SETTINGS, themesEnabled: DEFAULT_SETTINGS.themesEnabled.slice() };
   for (const [k, t] of Object.entries(SETTING_TYPES)) {
     if (!(k in raw)) continue;
     const v = raw[k];
     if (t === "boolean") s[k] = v === true || v === "true";
     else if (t === "string") s[k] = str(v, 2000);
+    else if (t === "array") s[k] = (Array.isArray(v) ? v : String(v || "").split(",")).map((x) => str(x, 60)).filter(Boolean);
   }
+  // migrate settings from before the theme system
+  if (!("theme" in raw) && "defaultTheme" in raw) {
+    if (raw.defaultTheme === "light") { s.theme = "paper"; s.themeAuto = false; }
+    else s.themeAuto = raw.defaultTheme !== "dark";
+  }
+  if (!("bgEffect" in raw) && raw.animatedBackground === false) s.bgEffect = "none";
+  if (!("accentOverride" in raw) && ((raw.accent && raw.accent !== DEFAULT_SETTINGS.accent) || (raw.accent2 && raw.accent2 !== DEFAULT_SETTINGS.accent2))) s.accentOverride = true;
+
   for (const k of ["accent", "accent2"]) if (!/^#[0-9a-f]{6}$/i.test(s[k])) s[k] = DEFAULT_SETTINGS[k];
-  if (!["auto", "dark", "light"].includes(s.defaultTheme)) s.defaultTheme = "auto";
+  for (const [k, opts] of Object.entries(APPEARANCE_OPTIONS)) if (!opts.some((o) => o[0] === s[k])) s[k] = DEFAULT_SETTINGS[k];
+  if (!THEME_IDS.includes(s.theme)) s.theme = DEFAULT_SETTINGS.theme;
+  if (!THEME_IDS.includes(s.themeLight)) s.themeLight = DEFAULT_SETTINGS.themeLight;
+  s.themesEnabled = THEME_IDS.filter((id) => s.themesEnabled.includes(id) || id === s.theme || (s.themeAuto && id === s.themeLight));
   s.sourceUrl = safeUrl(s.sourceUrl);
   if (s.defaultTimezone && !isValidTimeZone(s.defaultTimezone)) s.defaultTimezone = "";
   return s;

@@ -9,6 +9,7 @@ A fast, searchable front-end for the curated list, plus an admin panel to manage
 | `server/server.mjs` | Zero-dependency Node.js server (Node 20+). It serves the site, the public API and the admin API, and stores data in `DATA_DIR`. |
 | `site/index.html`, `site/assets/app.js` | The public site. The catalog is embedded in the page on the server, so it loads with a single request. It has search, filters, and a header clock where visitors can choose a time zone. |
 | `site/admin.html`, `admin.js`, `admin.css` | The admin panel at `/admin`. |
+| `site/assets/themes.mjs`, `theme-init.js` | Theme palettes (served as `/assets/themes.css`) and the tiny script that applies the theme before first paint. |
 | `site/assets/catalog-format.mjs` | The shared data model, used by the server and the panel: Markdown/YAML/JSON parsing, export and merge. |
 | `site/assets/vendor/js-yaml.mjs` | js-yaml 4.1.0 (MIT), vendored. |
 | `docker-compose.yml` | The Hostinger Docker Manager deployment (Traefik + Let's Encrypt). |
@@ -31,7 +32,12 @@ A fast, searchable front-end for the curated list, plus an admin panel to manage
 - **Backup & restore**:
   - An automatic backup is made before every save and restore (the last 40 are kept), and you can also create manual backups.
   - Download and restore server backups, or load a backup file into the editor.
-- **Customize site**: titles, hero text, notice, footer and attribution, accent colours, default theme, stats/favicon/animation toggles, and groups.
+- **Themes & appearance**:
+  - A gallery of 13 built-in themes, 10 dark and 3 light: Cyber Neon, Matrix Terminal, Deep Ocean, Red Team, Blue Team, Synthwave, Amethyst Night, Amber CRT, Arctic Frost, High Contrast, Paper Light, Mint Daylight and Sandstone.
+  - Pick the default theme, an optional theme for visitors whose device is in light mode, and which themes visitors can switch to from the palette button in the header.
+  - Appearance options that apply on top of any theme: font, corners, card style, density, background effect (network nodes, falling code, cyber grid, starfield, none), glow, favicons, stats tiles, and custom accent colours.
+  - A live desktop/mobile preview shows unsaved changes before you publish. Themes are defined in `site/assets/themes.mjs`.
+- **Site content**: titles, hero text, notice, footer and attribution, and groups.
 - **Clock & time zone**: turn the clock on or off, set the default time zone, 12/24-hour, seconds, and whether visitors may pick their own zone.
 - **Security**: change the admin password (stored as a scrypt hash, which replaces `ADMIN_PASSWORD`). Sessions use HttpOnly, SameSite=Strict signed cookies, and failed sign-ins are rate-limited.
 
