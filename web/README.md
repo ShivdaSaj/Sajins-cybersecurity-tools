@@ -6,6 +6,7 @@ A fast, searchable front-end for the curated list, plus an admin panel to manage
 
 | Path | What it is |
 |---|---|
+| `server/github-sync.mjs` | Two-way sync of the catalog with the reference GitHub repository. |
 | `server/server.mjs` | Zero-dependency Node.js server (Node 20+). It serves the site, the public API and the admin API, and stores data in `DATA_DIR`. |
 | `site/index.html`, `site/assets/app.js` | The public site. The catalog is embedded in the page on the server, so it loads with a single request. It has search, filters, and a header clock where visitors can choose a time zone. |
 | `site/admin.html`, `admin.js`, `admin.css` | The admin panel at `/admin`. |
@@ -39,9 +40,28 @@ A fast, searchable front-end for the curated list, plus an admin panel to manage
   - A live desktop/mobile preview shows unsaved changes before you publish. Themes are defined in `site/assets/themes.mjs`.
 - **Site content**: titles, hero text, notice, footer and attribution, and groups.
 - **Clock & time zone**: turn the clock on or off, set the default time zone, 12/24-hour, seconds, and whether visitors may pick their own zone.
+- **GitHub sync**:
+  - Shows the repository status: in sync, website ahead, GitHub ahead, or conflict.
+  - Buttons to push now, apply GitHub edits now, "Pull & review" the GitHub version in the editor, and force push.
 - **Security**: change the admin password (stored as a scrypt hash, which replaces `ADMIN_PASSWORD`). Sessions use HttpOnly, SameSite=Strict signed cookies, and failed sign-ins are rate-limited.
 
 Every **Save & publish** writes a new revision, which goes live immediately. Public downloads are at `/catalog.md`, `/catalog.yaml` and `/catalog.json`.
+
+## Reference repository and two-way sync
+
+The private repository **ShivdaSaj/Sajin-Cybersecurity-Resources** is the reference repository. It holds this codebase, and the site deploys from it.
+
+The catalog is synced with it in both directions:
+
+- **Website → GitHub:** every *Save & publish* (and backup restore) is committed as `catalog/catalog.yaml` and `catalog/CATALOG.md`. The YAML file is the source of truth and includes the site settings; the Markdown file is a readable list.
+- **GitHub → website:** edits to `catalog/catalog.yaml` on GitHub are applied automatically within `GITHUB_PULL_MINUTES` (default 5), with a backup first, provided the website has no unsynced changes.
+- **Both changed:** nothing is overwritten. The admin resolves it with *Pull & review* or *Force push*.
+
+Setup:
+1. Create a fine-grained personal access token. Give it access to this repository only, with the permission **Contents: Read and write**.
+2. In Docker Manager, add `GITHUB_REPO=ShivdaSaj/Sajin-Cybersecurity-Resources` and `GITHUB_TOKEN=<token>`, then restart the project.
+
+Optional settings: `GITHUB_BRANCH` (default `main`), `GITHUB_CATALOG_DIR` (default `catalog`), `GITHUB_AUTO_PUSH=false`, `GITHUB_AUTO_PULL=false`, `GITHUB_PULL_MINUTES`. The token stays on the server and is never sent to the browser.
 
 ## Deploy / update
 
@@ -50,6 +70,8 @@ In Hostinger Docker Manager, create the project `cybersecuritytools` from `docke
 ```
 ADMIN_PASSWORD=<a long random password>
 SITE_REF=main
+GITHUB_REPO=ShivdaSaj/Sajin-Cybersecurity-Resources
+GITHUB_TOKEN=<fine-grained token, Contents: Read and write>
 ```
 
 On first start the catalog is seeded from this repository's `README.md`. After that, the copy in the `cybersecuritytools-data` volume is the source of truth. To deploy new site code, restart the project; the catalog in the volume is kept.

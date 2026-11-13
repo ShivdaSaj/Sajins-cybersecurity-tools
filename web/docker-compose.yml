@@ -1,11 +1,16 @@
 # Deploy with Hostinger Docker Manager (project name: cybersecuritytools).
 # No image build needed: the stock Node image downloads the site code from GitHub
 # (branch SITE_REF) at start-up and runs the server + admin panel.
+# With GITHUB_REPO + GITHUB_TOKEN set, the code comes from that (private) reference repository
+# and the catalog is kept in two-way sync with it; otherwise the public repository is used.
 # Catalog, settings, backups and the admin password hash live in the named volume.
 # Routed over HTTPS by the existing Traefik instance (Let's Encrypt).
 #
-# Required environment variable (set it in Docker Manager, never commit it):
+# Environment variables (set them in Docker Manager, never commit them):
 #   ADMIN_PASSWORD   initial admin password (can be changed later in the admin panel)
+#   GITHUB_REPO      reference repository, e.g. ShivdaSaj/Sajin-Cybersecurity-Resources
+#   GITHUB_TOKEN     fine-grained token for that repository only, "Contents: Read and write"
+#   SITE_REF         branch to deploy (default main)
 services:
   cybersecuritytools:
     image: node:22-alpine
@@ -18,15 +23,29 @@ services:
       - RUN_AS_UID=1000
       - SITE_REF=${SITE_REF:-main}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - GITHUB_REPO=${GITHUB_REPO:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - GITHUB_BRANCH=${GITHUB_BRANCH:-main}
     volumes:
       - cybersecuritytools-data:/data
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         set -e
-        SRC="https://codeload.github.com/ShivdaSaj/Sajins-cybersecurity-tools/tar.gz/refs/heads/$${SITE_REF}"
         mkdir -p /data /tmp/src
-        if wget -q -T 60 -O /tmp/site.tgz "$$SRC"; then
+        if [ -n "$${GITHUB_TOKEN}" ] && [ -n "$${GITHUB_REPO}" ]; then
+          export SRC="https://api.github.com/repos/$${GITHUB_REPO}/tarball/$${SITE_REF}"
+        else
+          export SRC="https://codeload.github.com/ShivdaSaj/Sajins-cybersecurity-tools/tar.gz/refs/heads/$${SITE_REF}"
+        fi
+        if node -e '
+          const h = { "User-Agent": "cybersecuritytools-deploy" };
+          if (process.env.GITHUB_TOKEN && process.env.GITHUB_REPO) h.Authorization = "Bearer " + process.env.GITHUB_TOKEN;
+          fetch(process.env.SRC, { headers: h, signal: AbortSignal.timeout(90000) })
+            .then(async (r) => { if (!r.ok) throw new Error("HTTP " + r.status); require("fs").writeFileSync("/tmp/site.tgz", Buffer.from(await r.arrayBuffer())); })
+            .catch((e) => { console.error("download failed: " + e.message); process.exit(1); });
+        '; then
+          echo "Site code downloaded from $$SRC"
           cp /tmp/site.tgz /data/.site-cache.tgz
         elif [ -f /data/.site-cache.tgz ]; then
           echo "GitHub unreachable, using cached site code"

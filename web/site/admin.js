@@ -67,7 +67,7 @@ const S = {
 const views = {
   dashboard: ["Dashboard", renderDashboard], catalog: ["Catalog editor", renderCatalog], import: ["Import / Export", renderImport],
   ingest: ["Ingest & snippets", renderIngest], backups: ["Backup & restore", renderBackups], appearance: ["Site content", renderAppearance], themes: ["Themes & appearance", renderThemes],
-  clock: ["Clock & time zone", renderClock], security: ["Security", renderSecurity],
+  clock: ["Clock & time zone", renderClock], github: ["GitHub sync", renderGitHub], security: ["Security", renderSecurity],
 };
 const strip = (c) => JSON.stringify({ settings: c.settings, groups: c.groups, categories: c.categories });
 const dirty = () => S.draft && strip(S.draft) !== S.savedStr;
@@ -119,25 +119,40 @@ async function save() {
   const note = [...new Set(S.labels)].slice(-4).join(", ") || "edit";
   $("#saveBtn").disabled = true;
   try {
-    const res = await api("PUT", "/api/admin/catalog", { rev: S.saved.rev, catalog: S.draft, note });
+    const res = await api("PUT", "/api/admin/catalog", { rev: S.saved.rev, catalog: S.draft, note, githubBase: S.githubBase || undefined });
     const keepCat = S.catId;
+    const syncRes = takeSync(res);
+    S.githubBase = "";
     setSaved(res);
     S.catId = catById(keepCat) ? keepCat : S.catId;
     S.backups = null;
     updateTopbar(); render();
     toast(`Saved and published (revision ${res.rev})`);
+    reportSync(syncRes);
   } catch (e) {
     if (e.status === 409) {
       const ok = await confirmBox("Catalog changed elsewhere", "Someone saved a newer version (maybe in another tab). Overwrite it with your changes? The newer version is kept as an automatic backup.", "Overwrite");
       if (ok) {
         try {
-          const res = await api("PUT", "/api/admin/catalog", { rev: S.saved.rev, catalog: S.draft, note, force: true });
+          const res = await api("PUT", "/api/admin/catalog", { rev: S.saved.rev, catalog: S.draft, note, force: true, githubBase: S.githubBase || undefined });
+          const syncRes = takeSync(res);
+          S.githubBase = "";
           setSaved(res); updateTopbar(); render(); toast(`Saved (revision ${res.rev})`);
+          reportSync(syncRes);
         } catch (e2) { toast(e2.message, "bad"); }
       }
     } else toast(e.message, "bad", 6000);
     updateTopbar();
   }
+}
+
+function takeSync(res) { const r = res && res.sync; if (res) delete res.sync; return r; }
+function reportSync(r) {
+  S.gh = null;
+  if (!r || !r.enabled) return;
+  if (r.committed) toast("Committed to GitHub", "ok");
+  else if (r.conflict) toast("Saved on the website, but GitHub has newer edits, so nothing was committed. Open “GitHub sync” to pull or force push.", "bad", 9000);
+  else if (r.error) toast("Saved on the website, but the GitHub commit failed: " + r.error, "bad", 9000);
 }
 
 /* =========================================================================
@@ -1052,7 +1067,7 @@ ACT.dlCurrent = (b) => {
 };
 ACT.restoreBk = async (b) => {
   if (!(await confirmBox("Restore this backup?", `“${b.dataset.l}” replaces the live catalog and settings immediately. The current version is backed up first.${dirty() ? " Your unsaved changes will be discarded." : ""}`, "Restore now"))) return;
-  try { const res = await api("POST", `/api/admin/backups/${b.dataset.id}/restore`); setSaved(res); S.backups = null; render(); toast(`Restored — now at revision ${res.rev}`); } catch (e) { toast(e.message, "bad"); }
+  try { const res = await api("POST", `/api/admin/backups/${b.dataset.id}/restore`); const r = takeSync(res); setSaved(res); S.backups = null; render(); toast(`Restored — now at revision ${res.rev}`); reportSync(r); } catch (e) { toast(e.message, "bad"); }
 };
 ACT.delBk = async (b) => {
   if (!(await confirmBox("Delete this backup?", "This cannot be undone.", "Delete"))) return;
@@ -1303,6 +1318,103 @@ function renderClock(el) {
 }
 ACT.tzPick = (b) => { commit("default time zone", (dr) => (dr.settings.defaultTimezone = b.dataset.tz), { rerender: false }); $$("#tzSel button").forEach((x) => x.setAttribute("aria-selected", String(x === b))); $("#tzCur").textContent = b.dataset.tz; tickPreview(); };
 ACT.tzDevice = () => { commit("default time zone", (dr) => (dr.settings.defaultTimezone = ""), { rerender: false }); $$("#tzSel button").forEach((x) => x.setAttribute("aria-selected", "false")); $("#tzCur").textContent = "Visitor's device time zone"; tickPreview(); };
+
+/* =========================================================================
+   GitHub sync
+   ========================================================================= */
+const GH_STATES = {
+  "in-sync": ["In sync", "good", "The website and GitHub have the same catalog."],
+  "local-ahead": ["Website ahead", "warn", "The website has changes that are not on GitHub yet. Push to commit them."],
+  "remote-ahead": ["GitHub ahead", "warn", "GitHub has edits the website has not applied yet. They are applied automatically at the next check, or press “Apply GitHub edits now”."],
+  conflict: ["Conflict", "bad", "Both the website and GitHub changed since the last sync. Pull & review the GitHub version, or force push to overwrite GitHub with the website version."],
+  missing: ["Not on GitHub yet", "warn", "The repository has no catalog file yet. Push to create it."],
+  unknown: ["Not checked yet", "", "Press “Check now”."],
+};
+async function renderGitHub(el) {
+  el.innerHTML = '<p class="muted">Loading…</p>';
+  try { if (!S.ghFresh) S.gh = await api("GET", "/api/admin/github"); } catch (e) { el.innerHTML = `<p class="err">${esc(e.message)}</p>`; return; }
+  S.ghFresh = false;
+  if (S.view !== "github") return;
+  const g = S.gh, c = g.configured, st = g.state;
+  if (!g.enabled) {
+    el.innerHTML = `<div class="panel"><h3>GitHub sync is not set up</h3><p class="muted">Two-way sync keeps the catalog in a GitHub repository: every <b>Save &amp; publish</b> is committed there, and edits made on GitHub flow back to the website.</p>
+      <ol class="small" style="line-height:1.8;padding-left:18px">
+        <li>On GitHub, create a fine-grained personal access token (Settings → Developer settings → Fine-grained tokens). For <b>Repository access</b>, choose only <b>${esc(c.repo || "your catalog repository")}</b>. Under Permissions → Repository permissions, set <b>Contents: Read and write</b>.</li>
+        <li>In Hostinger Docker Manager, open the <b>cybersecuritytools</b> project and add the environment variables <code>GITHUB_REPO=owner/name</code> and <code>GITHUB_TOKEN=&lt;the token&gt;</code>, then restart the project.</li>
+      </ol>
+      <div class="stat-line"><span>GITHUB_REPO: <b>${c.repo ? esc(c.repo) + (c.validRepo ? "" : " (invalid)") : "not set"}</b></span><span>GITHUB_TOKEN: <b>${c.hasToken ? "set" : "not set"}</b></span></div>
+      <p class="small muted">Optional: <code>GITHUB_BRANCH</code> (default main), <code>GITHUB_CATALOG_DIR</code> (default catalog), <code>GITHUB_AUTO_PUSH=false</code>, <code>GITHUB_AUTO_PULL=false</code>, <code>GITHUB_PULL_MINUTES</code> (default 5). The token stays on the server; it is never shown here.</p></div>`;
+    return;
+  }
+  const [label, tone, explain] = GH_STATES[st.remoteState] || GH_STATES.unknown;
+  const toneCss = tone ? `color:var(--${tone});border-color:var(--${tone})` : "";
+  const when = (t) => (t ? esc(fmtDate(t)) : "never");
+  el.innerHTML = `<div class="cols">
+    <div class="panel"><h3>Repository</h3><p class="muted">The catalog is stored as <code>${esc(c.files[0])}</code> (the source of truth, including site settings) and <code>${esc(c.files[1])}</code> (a readable list).</p>
+      <div class="list">
+        <div class="li"><span class="grow">Repository</span><a href="${esc(g.repoUrl)}" target="_blank" rel="noopener">${esc(c.repo)}</a></div>
+        <div class="li"><span class="grow">Branch</span><b class="mono">${esc(c.branch)}</b></div>
+        <div class="li"><span class="grow">Catalog file</span><a href="${esc(g.fileUrl)}" target="_blank" rel="noopener">${esc(c.files[0])}</a></div>
+        <div class="li"><span class="grow">Commit on every Save &amp; publish</span><b>${c.autoPush ? "On" : "Off"}</b></div>
+        <div class="li"><span class="grow">Apply edits made on GitHub</span><b>${c.autoPull ? `Automatically, every ${c.pullMinutes} min` : "Manually"}</b></div>
+      </div></div>
+    <div class="panel"><div class="row"><h3>Status</h3><span class="tag" style="${toneCss}">${esc(label)}</span><span class="spacer"></span><button class="btn sm" data-act="ghCheck">Check now</button></div>
+      <p class="muted">${esc(explain)}</p>
+      <div class="list">
+        <div class="li"><span class="grow">Website revision / last synced</span><b class="mono">r${g.localRev} / r${st.syncedRev || "–"}</b></div>
+        <div class="li"><span class="grow">Last commit to GitHub</span>${st.lastCommit ? `<a href="${esc(st.lastCommitUrl)}" target="_blank" rel="noopener" class="mono">${esc(st.lastCommit.slice(0, 7))}</a>&nbsp;<span class="small muted">${when(st.lastPushAt)}</span>` : '<span class="muted">never</span>'}</div>
+        <div class="li"><span class="grow">Last applied from GitHub</span><span class="small muted">${when(st.lastPullAt)}</span></div>
+        <div class="li"><span class="grow">Last checked</span><span class="small muted">${when(st.lastCheckAt)}</span></div>
+        ${st.lastError ? `<div class="li"><span class="grow err" style="margin:0">${esc(st.lastError)}</span><span class="small muted">${when(st.lastErrorAt)}</span></div>` : ""}
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn primary" data-act="ghPush">Push to GitHub now</button>
+        <button class="btn" data-act="ghApply">Apply GitHub edits now</button>
+        <button class="btn" data-act="ghPull">Pull &amp; review…</button>
+        ${st.remoteState === "conflict" ? '<button class="btn danger" data-act="ghForce">Force push (overwrite GitHub)</button>' : ""}
+      </div></div></div>
+    <div class="panel"><h3>How the sync works</h3><ul class="small muted" style="line-height:1.8;padding-left:18px;margin:0">
+      <li><b>Website → GitHub:</b> every Save &amp; publish (and every backup restore) is committed automatically as one commit.</li>
+      <li><b>GitHub → website:</b> edit <code>${esc(c.files[0])}</code> on GitHub (or push to it). If the website has no un-synced changes, the edit goes live automatically, with an automatic backup first.</li>
+      <li><b>Both changed:</b> nothing is overwritten. Use <i>Pull &amp; review</i> to load the GitHub version into the editor (then Save &amp; publish), or <i>Force push</i> to keep the website version.</li>
+    </ul></div>`;
+}
+async function ghAction(fn) {
+  try { await fn(); } catch (e) { toast(e.message, "bad", 8000); if (e.data && e.data.status) S.gh = e.data.status; }
+  if (S.view === "github") { S.ghFresh = !!S.gh; render(); }
+}
+ACT.ghCheck = () => ghAction(async () => { S.gh = await api("GET", "/api/admin/github?refresh=1"); toast("Checked GitHub"); });
+ACT.ghPush = () => ghAction(async () => {
+  if (dirty()) toast("Note: unsaved edits are not pushed. Save & publish first.", "bad", 6000);
+  const r = await api("POST", "/api/admin/github/push", { force: false });
+  S.gh = r.status;
+  toast(r.committed ? "Committed to GitHub" : "GitHub is already up to date");
+});
+ACT.ghForce = async () => {
+  if (!(await confirmBox("Overwrite GitHub?", "The catalog file on GitHub is replaced with the website version. The GitHub edits stay in the repository history.", "Force push"))) return;
+  ghAction(async () => { const r = await api("POST", "/api/admin/github/push", { force: true }); S.gh = r.status; toast("Committed to GitHub"); });
+};
+ACT.ghApply = () => ghAction(async () => {
+  const r = await api("POST", "/api/admin/github/check");
+  if (r.applied && r.catalog) {
+    if (dirty()) toast("GitHub edits were published. Your unsaved draft is based on the older version; Discard to load the new one.", "bad", 9000);
+    else { setSaved(r.catalog); toast("GitHub edits applied and published"); }
+    delete r.catalog;
+  } else toast(r.state.remoteState === "conflict" ? "Not applied: both sides changed. Use Pull & review or Force push." : "Nothing new to apply", r.state.remoteState === "conflict" ? "bad" : "ok", 6000);
+  S.gh = r;
+});
+ACT.ghPull = () => ghAction(async () => {
+  const f = await api("POST", "/api/admin/github/pull");
+  const p = F.parseAny(f.text, f.path);
+  const next = F.normalizeCatalog({ settings: { ...S.draft.settings, ...(p.settings || {}) }, groups: p.groups || S.draft.groups, categories: p.categories || [] });
+  if (!next.categories.length) throw new Error(`${f.path} on GitHub has no categories`);
+  if (!(await confirmBox("Load the GitHub version into the editor?", `${f.path} on GitHub has ${next.categories.length} categories and ${countItems(next)} entries${p.settings ? " plus site settings" : ""}. It replaces your current draft; nothing goes live until you press Save & publish, which then also updates GitHub.`, "Load", false))) return;
+  commit("pull from GitHub", (dr) => { dr.settings = next.settings; dr.groups = next.groups; dr.categories = next.categories; }, { rerender: false });
+  S.githubBase = f.sha;
+  S.catId = cats()[0]?.id;
+  toast("GitHub version loaded — review it, then Save & publish", "ok", 7000);
+  go("catalog");
+});
 
 /* =========================================================================
    security

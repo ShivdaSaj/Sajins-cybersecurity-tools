@@ -16,6 +16,7 @@ import {
   normalizeCatalog, catalogFromReadme, toMarkdown, toYAML, toPortable, DEFAULT_SETTINGS,
 } from "../site/assets/catalog-format.mjs";
 import { THEMES, themeById, themesCSS } from "../site/assets/themes.mjs";
+import { createGitHubSync } from "./github-sync.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SITE_DIR = path.resolve(__dirname, "../site");
@@ -34,6 +35,7 @@ const log = (...a) => console.log(new Date().toISOString(), ...a);
 /* ---------------- storage ---------------- */
 
 let catalog = null;
+let sync = null; // GitHub two-way sync (enabled by GITHUB_REPO + GITHUB_TOKEN)
 let writeChain = Promise.resolve();
 let secret = null;
 let auth = null; // { salt, hash, version } when password set from the panel
@@ -85,6 +87,20 @@ async function init() {
     log(`catalog seeded from README: ${countItems(catalog)} items`);
   }
   rebuildPublic();
+  sync = createGitHubSync({
+    dataDir: DATA_DIR,
+    getCatalog: () => catalog,
+    applyRemote: (next, label) => saveCatalog(next, { backupLabel: label }),
+    log,
+  });
+  await sync.load();
+}
+
+/** Commit to GitHub after a save; returns a summary for the admin panel instead of failing the save. */
+async function syncAfterSave(message) {
+  if (!sync || !sync.enabled || !sync.autoPush) return { enabled: !!(sync && sync.enabled), skipped: true };
+  try { return { enabled: true, ...(await sync.push({ message })) }; }
+  catch (e) { return { enabled: true, error: e.message, conflict: e.code === 409 }; }
 }
 
 const countItems = (c) => c.categories.reduce((a, x) => a + x.items.length, 0);
@@ -488,9 +504,12 @@ async function handleApi(req, res, url) {
     if (!body.catalog || typeof body.catalog !== "object") return json(res, 400, { error: "Missing catalog" });
     if (body.rev !== catalog.rev && !body.force) return json(res, 409, { error: "The catalog was changed elsewhere. Reload to get the latest version.", rev: catalog.rev });
     const next = normalizeCatalog(body.catalog);
-    const saved = await saveCatalog(next, { backupLabel: "Auto: before " + String(body.note || "save").slice(0, 80) });
-    log(`catalog saved rev ${saved.rev} (${String(body.note || "save").slice(0, 80)})`);
-    return json(res, 200, saved);
+    if (body.githubBase && sync) await sync.accept(body.githubBase);
+    const note = String(body.note || "save").slice(0, 80);
+    const saved = await saveCatalog(next, { backupLabel: "Auto: before " + note });
+    log(`catalog saved rev ${saved.rev} (${note})`);
+    const syncResult = await syncAfterSave(`Catalog revision ${saved.rev}: ${note}`);
+    return json(res, 200, { ...saved, sync: syncResult });
   }
 
   if (p === "/api/admin/backups" && m === "GET") return json(res, 200, await listBackups());
@@ -514,12 +533,34 @@ async function handleApi(req, res, url) {
       if (!b || !b.catalog) return json(res, 404, { error: "Not found" });
       const saved = await saveCatalog(normalizeCatalog(b.catalog), { backupLabel: `Auto: before restore of ${b.meta.label || id}` });
       log(`restored backup ${id} -> rev ${saved.rev}`);
-      return json(res, 200, saved);
+      const syncResult = await syncAfterSave(`Catalog revision ${saved.rev}: restored backup “${String(b.meta.label || id).slice(0, 80)}”`);
+      return json(res, 200, { ...saved, sync: syncResult });
     }
     if (m === "DELETE" && !mm[2]) {
       await fsp.unlink(file).catch(() => {});
       return json(res, 200, { ok: true });
     }
+  }
+
+  if (p === "/api/admin/github" && m === "GET") {
+    if (url.searchParams.get("refresh") === "1" && sync.enabled) return json(res, 200, await sync.check({ apply: false }));
+    return json(res, 200, sync.status());
+  }
+  if (p === "/api/admin/github/push" && m === "POST") {
+    const body = await readBody(req, 4096);
+    try {
+      const r = await sync.push({ force: body.force === true, message: `Catalog revision ${catalog.rev}: ${body.force ? "force push" : "manual sync"} from admin panel` });
+      return json(res, 200, { ...r, status: sync.status() });
+    } catch (e) { return json(res, e.code === 409 ? 409 : 502, { error: e.message, status: sync.status() }); }
+  }
+  if (p === "/api/admin/github/pull" && m === "POST") {
+    try { return json(res, 200, await sync.fetchRemote()); }
+    catch (e) { return json(res, e.code === 404 ? 404 : e.code === 400 ? 400 : 502, { error: e.message }); }
+  }
+  if (p === "/api/admin/github/check" && m === "POST") {
+    const st = await sync.check();
+    if (st.state.remoteState === "in-sync" && st.state.lastPullAt && Date.now() - Date.parse(st.state.lastPullAt) < 5000) return json(res, 200, { ...st, applied: true, catalog });
+    return json(res, 200, st);
   }
 
   if (p === "/api/admin/fetch" && m === "POST") {
@@ -584,6 +625,7 @@ server.headersTimeout = 70000;
 server.requestTimeout = 60000;
 
 init().then(() => {
+  sync.start();
   server.listen(PORT, () => log(`listening on :${PORT}, data in ${DATA_DIR}, admin ${authConfigured() ? "enabled" : "DISABLED (set ADMIN_PASSWORD)"}`));
 }).catch((e) => { console.error(e); process.exit(1); });
 
