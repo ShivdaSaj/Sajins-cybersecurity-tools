@@ -1,9 +1,4 @@
-# Awesome Cybersecurity Tools
-
-[![Awesome](https://img.shields.io/badge/Awesome-Cybersecurity-000000.svg?logo=github&labelColor=24292e)](#)
-[![Stars](https://img.shields.io/github/stars/eudk/awesome-cybersecurity?style=social)](#)
-[![Forks](https://img.shields.io/github/forks/eudk/awesome-cybersecurity?style=social)](#)
-[![Last Commit](https://img.shields.io/badge/last%20commit-auto--updated-informational)](#)
+# Sajins Cybersecurity Tools
 
 A practical,  catalog of security tools for students, red/blue teams, and builders. Focus is on widely used, well-maintained, and actually useful software across recon, web/API, cloud, containers, AD, DFIR, and more.
 
