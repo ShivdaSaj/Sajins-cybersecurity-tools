@@ -1,0 +1,20 @@
+# Deploy with Hostinger Docker Manager (project name: cybersecuritytools).
+# Builds straight from GitHub and is routed by the existing Traefik instance.
+services:
+  cybersecuritytools:
+    build:
+      context: https://github.com/ShivdaSaj/Sajins-cybersecurity-tools.git#${GIT_REF:-main}
+      dockerfile: web/Dockerfile
+    image: sajins-cybersecuritytools:latest
+    container_name: cybersecuritytools
+    restart: unless-stopped
+    environment:
+      - README_URL=https://raw.githubusercontent.com/ShivdaSaj/Sajins-cybersecurity-tools/main/README.md
+      - SYNC_INTERVAL=21600
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.cybersecuritytools.rule=Host(`cybersecuritytools.sajinshivdas.online`)
+      - traefik.http.routers.cybersecuritytools.entrypoints=websecure
+      - traefik.http.routers.cybersecuritytools.tls=true
+      - traefik.http.routers.cybersecuritytools.tls.certresolver=letsencrypt
+      - traefik.http.services.cybersecuritytools.loadbalancer.server.port=80
