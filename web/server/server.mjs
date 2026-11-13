@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import {
   normalizeCatalog, catalogFromReadme, toMarkdown, toYAML, toPortable, DEFAULT_SETTINGS,
 } from "../site/assets/catalog-format.mjs";
+import { THEMES, themeById, themesCSS } from "../site/assets/themes.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SITE_DIR = path.resolve(__dirname, "../site");
@@ -317,11 +318,36 @@ function loadStatic(rel) {
 let pub = null; // { json, etag, gz, br, html: {buf,gz,br,etag} }
 function escHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]); }
 function rebuildPublic() {
-  const data = { rev: catalog.rev, updatedAt: catalog.updatedAt, settings: catalog.settings, groups: catalog.groups, categories: catalog.categories };
+  const en = catalog.settings.themesEnabled;
+  const themes = THEMES.filter((t) => en.includes(t.id)).map((t) => ({ id: t.id, name: t.name, mode: t.mode, sw: [t.c.bg, t.c.accent, t.c.accent2, t.c.accent3] }));
+  const data = { rev: catalog.rev, updatedAt: catalog.updatedAt, settings: catalog.settings, themes, groups: catalog.groups, categories: catalog.categories };
   const json = JSON.stringify(data);
   const etag = `"r${catalog.rev}-${crypto.createHash("sha1").update(json).digest("base64url").slice(0, 10)}"`;
   pub = { json: Buffer.from(json), etag, gz: zlib.gzipSync(json, { level: 9 }), br: zlib.brotliCompressSync(json), htmlFor: null };
 }
+/** Attributes on <html> that theme-init.js uses to pick the theme before first paint. */
+function htmlAttrs(s) {
+  const a = {
+    "data-skin": s.theme, "data-skin-default": s.theme, "data-skin-light": s.themeLight, "data-auto": s.themeAuto ? "1" : "0",
+    "data-allow": s.themeAllowVisitor ? "1" : "0", "data-skins": s.themesEnabled.join(","),
+    "data-themes": THEMES.map((t) => `${t.id}:${t.mode === "light" ? "l" : "d"}:${t.fx}:${t.font}`).join(","),
+    "data-font-setting": s.fontStyle, "data-fx-setting": s.bgEffect, "data-radius": s.radius, "data-card": s.cardStyle,
+    "data-density": s.density, "data-glow": s.glow ? "1" : "0",
+  };
+  return Object.entries(a).map(([k, v]) => `${k}="${escHtml(v)}"`).join(" ");
+}
+function accentCss(s) {
+  if (!s.accentOverride || !/^#[0-9a-f]{6}$/i.test(s.accent) || !/^#[0-9a-f]{6}$/i.test(s.accent2)) return "";
+  return `:root:root[data-skin]{--accent:${s.accent};--accent2:${s.accent2}}`;
+}
+let themesEntry = null;
+function themesCssEntry() {
+  if (themesEntry) return themesEntry;
+  const buf = Buffer.from(themesCSS());
+  themesEntry = { buf, type: MIME[".css"], etag: '"' + crypto.createHash("sha1").update(buf).digest("base64url").slice(0, 16) + '"', gz: zlib.gzipSync(buf, { level: 9 }), br: zlib.brotliCompressSync(buf) };
+  return themesEntry;
+}
+
 function renderIndex() {
   const tpl = loadStatic("/index.html");
   if (!tpl) return null;
@@ -332,7 +358,9 @@ function renderIndex() {
     .replace("<!--BOOT-->", boot)
     .replace(/\{\{TITLE\}\}/g, escHtml(s.siteTitle || DEFAULT_SETTINGS.siteTitle))
     .replace(/\{\{DESC\}\}/g, escHtml(s.metaDescription || ""))
-    .replace(/\{\{THEME\}\}/g, s.defaultTheme === "light" || s.defaultTheme === "dark" ? s.defaultTheme : "");
+    .replace("{{HTMLATTRS}}", htmlAttrs(s))
+    .replace("{{THEMECOLOR}}", escHtml((themeById(s.theme) || THEMES[0]).c.bg))
+    .replace("/*ACCENT*/", accentCss(s));
   const buf = Buffer.from(html);
   pub.html = { buf, gz: zlib.gzipSync(buf, { level: 9 }), br: zlib.brotliCompressSync(buf), etag: pub.etag.replace(/"$/, "-" + tpl.etag.slice(1, 7) + '"'), type: MIME[".html"] };
   pub.htmlFor = tpl.etag;
@@ -342,10 +370,12 @@ function renderIndex() {
 /* ---------------- http helpers ---------------- */
 
 const CSP_PUBLIC = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://icons.duckduckgo.com https://github.com https://avatars.githubusercontent.com; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'";
+// the public page may be framed by our own admin panel (live theme preview), nothing else
+const CSP_INDEX = CSP_PUBLIC.replace("frame-ancestors 'none'", "frame-ancestors 'self'");
 function secHeaders(res, csp = CSP_PUBLIC) {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-Frame-Options", csp === CSP_INDEX ? "SAMEORIGIN" : "DENY");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   res.setHeader("Content-Security-Policy", csp);
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
@@ -515,7 +545,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== "GET" && req.method !== "HEAD") { res.statusCode = 405; return res.end(); }
 
     if (p === "/" || p === "/index.html") {
-      secHeaders(res);
+      secHeaders(res, CSP_INDEX);
       const e = renderIndex();
       if (!e) { res.statusCode = 500; return res.end("index missing"); }
       return sendEntry(req, res, e, "no-cache");
@@ -533,6 +563,7 @@ const server = http.createServer(async (req, res) => {
       return sendText(res, 200, JSON.stringify(toPortable(catalog), null, 2), "application/json; charset=utf-8");
     }
     if (p === "/robots.txt") return sendText(res, 200, "User-agent: *\nDisallow: /admin\nDisallow: /api/\n", "text/plain");
+    if (p === "/assets/themes.css") { secHeaders(res); return sendEntry(req, res, themesCssEntry(), "public, max-age=300, must-revalidate"); }
     if (/^\/(assets\/|admin\.(js|css)$|favicon)/.test(p) && !p.includes("..")) {
       const e = loadStatic(p);
       if (e) { secHeaders(res); return sendEntry(req, res, e, p.startsWith("/assets/vendor/") ? "public, max-age=604800" : "public, max-age=300, must-revalidate"); }

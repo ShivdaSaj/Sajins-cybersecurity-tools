@@ -1,4 +1,5 @@
 import * as F from "./assets/catalog-format.mjs";
+import { THEMES, APPEARANCE_OPTIONS, themeById } from "./assets/themes.mjs";
 
 /* =========================================================================
    helpers
@@ -65,7 +66,7 @@ const S = {
 };
 const views = {
   dashboard: ["Dashboard", renderDashboard], catalog: ["Catalog editor", renderCatalog], import: ["Import / Export", renderImport],
-  ingest: ["Ingest & snippets", renderIngest], backups: ["Backup & restore", renderBackups], appearance: ["Customize site", renderAppearance],
+  ingest: ["Ingest & snippets", renderIngest], backups: ["Backup & restore", renderBackups], appearance: ["Site content", renderAppearance], themes: ["Themes & appearance", renderThemes],
   clock: ["Clock & time zone", renderClock], security: ["Security", renderSecurity],
 };
 const strip = (c) => JSON.stringify({ settings: c.settings, groups: c.groups, categories: c.categories });
@@ -1092,6 +1093,7 @@ function bindSettings(el) {
       inp.style.borderColor = "";
       commit("settings", (dr) => { dr.settings[k] = v; }, { coalesce: "set:" + k, rerender: false });
       if (S.view === "clock") tickPreview();
+      if (S.view === "themes") onThemeSettingChange(k);
     });
   });
 }
@@ -1112,13 +1114,6 @@ function renderAppearance(el) {
     ${setField("footerText", "Footer attribution text")}${setField("sourceLabel", "Attribution link text")}
     ${setField("sourceUrl", "Attribution link URL (leave empty to hide)", "url", "span2")}
   </div></div>
-  <div class="panel"><h3>Look &amp; feel</h3><div class="grid3">
-    <label class="fld"><span>Accent colour</span><div class="row"><input type="color" data-set="accent" value="${esc(s.accent)}"><span class="mono small">${esc(s.accent)}</span></div></label>
-    <label class="fld"><span>Second accent (gradient)</span><div class="row"><input type="color" data-set="accent2" value="${esc(s.accent2)}"><span class="mono small">${esc(s.accent2)}</span></div></label>
-    <label class="fld"><span>Default theme</span><select data-set="defaultTheme"><option value="auto">Follow visitor's device</option><option value="dark">Dark</option><option value="light">Light</option></select></label>
-  </div>
-  <div class="row" style="gap:20px;margin-top:12px">${setField("showStats", "Show statistics tiles", "check")}${setField("showFavicons", "Show tool icons (favicons)", "check")}${setField("animatedBackground", "Animated network background", "check")}</div>
-  <div class="row" style="margin-top:12px"><button class="btn sm" data-act="resetLook">Reset colours to default</button></div></div>
   <div class="panel"><h3>Groups</h3><p class="muted">Groups organise categories in the sidebar and the filter buttons on the site (for example Tools, Learning, Compliance).</p>
     <div class="list">${S.draft.groups.map((g, i) => {
       const used = cats().filter((c) => c.group === g.id).length;
@@ -1126,11 +1121,119 @@ function renderAppearance(el) {
         <button class="btn xs" data-act="mvGrp" data-i="${i}" data-d="-1">▲</button><button class="btn xs" data-act="mvGrp" data-i="${i}" data-d="1">▼</button>
         <button class="btn xs danger" data-act="delGrp" data-i="${i}" ${S.draft.groups.length < 2 ? "disabled" : ""}>Delete</button></div>`; }).join("")}</div>
     <div class="row" style="margin-top:10px"><input id="newGrp" placeholder="New group name" maxlength="40" style="max-width:300px"><button class="btn" data-act="addGrp">+ Add group</button></div></div>`;
-  $('[data-set="defaultTheme"]', el).value = s.defaultTheme;
   bindSettings(el);
   el.querySelectorAll("[data-grp]").forEach((inp) => inp.addEventListener("input", () => commit("rename group", (dr) => { dr.groups[inp.dataset.grp].label = inp.value.trim() || dr.groups[inp.dataset.grp].id; }, { coalesce: "grp" + inp.dataset.grp, rerender: false })));
 }
-ACT.resetLook = () => commit("reset colours", (dr) => { dr.settings.accent = F.DEFAULT_SETTINGS.accent; dr.settings.accent2 = F.DEFAULT_SETTINGS.accent2; });
+/* =========================================================================
+   themes & appearance
+   ========================================================================= */
+function fontFor(t) {
+  const f = S.draft.settings.fontStyle === "theme" ? t.font : S.draft.settings.fontStyle;
+  return { mono: "ui-monospace,Menlo,Consolas,monospace", serif: "ui-serif,Georgia,serif", rounded: "ui-rounded,'SF Pro Rounded',Nunito,system-ui,sans-serif" }[f] || "system-ui,sans-serif";
+}
+function themeMock(t) {
+  const c = t.c;
+  return `<div class="tmock" style="background:${c.bg};color:${c.text};font-family:${fontFor(t)}">
+    <div class="tm-bar" style="border-bottom:1px solid ${c.line}"><span class="tm-logo" style="background:linear-gradient(135deg,${c.accent},${c.accent2})"></span><span class="tm-name">Cyber Tools</span><span class="tm-pill" style="background:${c.panel};border:1px solid ${c.line2};color:${c.muted}">12:00 <b style="color:${c.accent}">UTC</b></span></div>
+    <div class="tm-hero"><span style="background:linear-gradient(90deg,${c.accent},${c.accent2},${c.accent3});-webkit-background-clip:text;background-clip:text;color:transparent">Security toolkit</span></div>
+    <div class="tm-search" style="background:${c.panelSolid};border:1px solid ${c.line2};color:${c.dim}">Search tools…</div>
+    <div class="tm-cards">
+      <div style="background:${c.panel};border:1px solid ${c.line};box-shadow:inset 0 2px 0 ${c.accent}"><b>Nmap</b><span style="color:${c.muted}">Network scanner</span><i style="color:${c.good};border-color:${c.good}">FREE</i></div>
+      <div style="background:${c.panel};border:1px solid ${c.line};box-shadow:inset 0 2px 0 ${c.accent2}"><b>Burp</b><span style="color:${c.muted}">Web proxy</span><i style="color:${c.warn};border-color:${c.warn}">PAID</i></div>
+    </div></div>`;
+}
+function previewSkin() { return S.previewSkin && themeById(S.previewSkin) ? S.previewSkin : S.draft.settings.theme; }
+function sendPreview() {
+  const f = $("#tPrev");
+  if (!f || !f.contentWindow) return;
+  f.contentWindow.postMessage({ type: "cst-preview", skin: previewSkin(), settings: S.draft.settings }, location.origin);
+  const lbl = $("#tPrevLbl");
+  if (lbl) lbl.textContent = (themeById(previewSkin()) || {}).name + (S.previewSkin && S.previewSkin !== S.draft.settings.theme ? " (previewing)" : " (default)");
+}
+function onThemeSettingChange(k) {
+  sendPreview();
+  if (["fontStyle", "accentOverride", "themeAuto", "themeAllowVisitor"].includes(k)) renderThemeBody();
+}
+function renderThemes(el) {
+  el.innerHTML = `<div class="themes-layout">
+    <div id="themeBody"></div>
+    <aside class="tprev-wrap">
+      <div class="panel tprev-panel">
+        <div class="row" style="margin-bottom:8px"><h3>Live preview</h3><span class="spacer"></span>
+          <div class="tabs" style="margin:0"><button data-act="prevDev" data-d="desk" aria-selected="${S.prevDev !== "mobile"}">Desktop</button><button data-act="prevDev" data-d="mobile" aria-selected="${S.prevDev === "mobile"}">Mobile</button></div></div>
+        <div class="small muted" style="margin-bottom:8px">Showing <b id="tPrevLbl"></b>. Unsaved changes are previewed here only; <b>Save &amp; publish</b> makes them live.</div>
+        <div class="tprev-frame ${S.prevDev === "mobile" ? "mobile" : ""}"><iframe id="tPrev" src="/?preview=1" title="Site preview" loading="eager"></iframe></div>
+      </div>
+    </aside></div>`;
+  $("#tPrev").addEventListener("load", sendPreview);
+  renderThemeBody();
+}
+function renderThemeBody() {
+  const box = $("#themeBody");
+  if (!box) return;
+  const s = S.draft.settings, en = new Set(s.themesEnabled);
+  const opt = (k) => APPEARANCE_OPTIONS[k].map(([v, l]) => `<option value="${v}"${s[k] === v ? " selected" : ""}>${esc(l)}</option>`).join("");
+  box.innerHTML = `
+  <div class="panel"><h3>Theme gallery</h3><p class="muted">Click a theme to preview it. Set one as the <b>default</b>, and tick the themes visitors can switch to from the palette button in the site header.</p>
+    <div class="tgrid">${THEMES.map((t) => {
+      const isDef = s.theme === t.id, isLight = s.themeAuto && s.themeLight === t.id;
+      return `<div class="tcard${isDef ? " def" : ""}${previewSkin() === t.id ? " prev" : ""}">
+        <button class="tmock-btn" data-act="prevTheme" data-id="${t.id}" title="Preview ${esc(t.name)}">${themeMock(t)}</button>
+        <div class="tmeta"><div class="row" style="gap:6px"><b>${esc(t.name)}</b><span class="badge">${t.mode}</span>${isDef ? '<span class="badge manual">DEFAULT</span>' : ""}${isLight ? '<span class="badge manual">LIGHT DEVICES</span>' : ""}</div>
+          <div class="small muted">${esc(t.desc)}</div>
+          <div class="row" style="margin-top:8px;gap:6px">
+            <button class="btn xs ${isDef ? "" : "primary"}" data-act="setTheme" data-id="${t.id}" ${isDef ? "disabled" : ""}>${isDef ? "Default ✓" : "Set as default"}</button>
+            ${s.themeAuto && t.mode === "light" ? `<button class="btn xs" data-act="setLight" data-id="${t.id}" ${isLight ? "disabled" : ""}>${isLight ? "Light default ✓" : "Use for light devices"}</button>` : ""}
+            <label class="chk small" style="margin-left:auto" title="Visitors can pick this theme"><input type="checkbox" data-en="${t.id}" ${en.has(t.id) ? "checked" : ""} ${isDef || isLight ? "disabled" : ""}> Visitors</label>
+          </div></div></div>`;
+    }).join("")}</div>
+    <div class="row" style="margin-top:12px"><button class="btn sm" data-act="enAll">Offer all themes</button><button class="btn sm" data-act="enNone">Offer only the default</button><span class="small muted">${s.themesEnabled.length} of ${THEMES.length} themes offered to visitors</span></div>
+  </div>
+  <div class="panel"><h3>Theme behaviour</h3><div style="display:flex;flex-direction:column;gap:10px">
+    ${setField("themeAuto", "Follow the visitor's device: use a light theme for devices set to light mode", "check")}
+    ${s.themeAuto ? `<label class="fld" style="max-width:340px"><span>Theme for light-mode devices</span><select data-set="themeLight">${THEMES.filter((t) => t.mode === "light").map((t) => `<option value="${t.id}"${s.themeLight === t.id ? " selected" : ""}>${esc(t.name)}</option>`).join("")}</select></label>` : ""}
+    ${setField("themeAllowVisitor", "Let visitors switch themes (palette button in the header; their choice is remembered in their browser)", "check")}
+  </div></div>
+  <div class="panel"><h3>Appearance</h3><p class="muted">These apply on top of every theme.</p><div class="grid3">
+    <label class="fld"><span>Font</span><select data-set="fontStyle">${opt("fontStyle")}</select></label>
+    <label class="fld"><span>Corners</span><select data-set="radius">${opt("radius")}</select></label>
+    <label class="fld"><span>Card style</span><select data-set="cardStyle">${opt("cardStyle")}</select></label>
+    <label class="fld"><span>Layout density</span><select data-set="density">${opt("density")}</select></label>
+    <label class="fld"><span>Background effect</span><select data-set="bgEffect">${opt("bgEffect")}</select></label>
+    <div class="fld"><span>Extras</span><div style="display:flex;flex-direction:column;gap:6px">${setField("glow", "Colour glow blobs", "check")}${setField("showFavicons", "Tool icons (favicons)", "check")}${setField("showStats", "Statistics tiles", "check")}</div></div>
+  </div></div>
+  <div class="panel"><h3>Custom accent colours</h3><p class="muted">Override the selected theme's accent colours with your brand colours. Check that text stays readable in both light and dark themes.</p>
+    <div class="row" style="gap:18px">${setField("accentOverride", "Use custom accent colours", "check")}
+      <label class="row small" ${s.accentOverride ? "" : 'style="opacity:.45;pointer-events:none"'}><input type="color" data-set="accent" value="${esc(s.accent)}"> Accent</label>
+      <label class="row small" ${s.accentOverride ? "" : 'style="opacity:.45;pointer-events:none"'}><input type="color" data-set="accent2" value="${esc(s.accent2)}"> Gradient</label>
+      <button class="btn sm" data-act="resetLook">Reset to default colours</button></div></div>`;
+  bindSettings(box);
+  box.querySelectorAll("[data-en]").forEach((cb) => cb.addEventListener("change", () => {
+    commit("themes offered", (dr) => {
+      const set = new Set(dr.settings.themesEnabled);
+      cb.checked ? set.add(cb.dataset.en) : set.delete(cb.dataset.en);
+      dr.settings.themesEnabled = THEMES.map((t) => t.id).filter((id) => set.has(id));
+    }, { rerender: false });
+    renderThemeBody();
+  }));
+  sendPreview();
+}
+function themeCommit(label, fn) { commit(label, fn, { rerender: false }); renderThemeBody(); }
+ACT.prevTheme = (b) => { S.previewSkin = b.dataset.id; renderThemeBody(); };
+ACT.setTheme = (b) => themeCommit("default theme", (dr) => {
+  dr.settings.theme = b.dataset.id;
+  if (!dr.settings.themesEnabled.includes(b.dataset.id)) dr.settings.themesEnabled = THEMES.map((t) => t.id).filter((id) => id === b.dataset.id || dr.settings.themesEnabled.includes(id));
+  S.previewSkin = b.dataset.id;
+});
+ACT.setLight = (b) => themeCommit("light theme", (dr) => {
+  dr.settings.themeLight = b.dataset.id;
+  if (!dr.settings.themesEnabled.includes(b.dataset.id)) dr.settings.themesEnabled = THEMES.map((t) => t.id).filter((id) => id === b.dataset.id || dr.settings.themesEnabled.includes(id));
+  S.previewSkin = b.dataset.id;
+});
+ACT.enAll = () => themeCommit("themes offered", (dr) => (dr.settings.themesEnabled = THEMES.map((t) => t.id)));
+ACT.enNone = () => themeCommit("themes offered", (dr) => (dr.settings.themesEnabled = THEMES.map((t) => t.id).filter((id) => id === dr.settings.theme || (dr.settings.themeAuto && id === dr.settings.themeLight))));
+ACT.prevDev = (b) => { S.prevDev = b.dataset.d; $(".tprev-frame").classList.toggle("mobile", S.prevDev === "mobile"); $$('[data-act="prevDev"]').forEach((x) => x.setAttribute("aria-selected", String(x === b))); };
+ACT.resetLook = () => { commit("reset colours", (dr) => { dr.settings.accent = F.DEFAULT_SETTINGS.accent; dr.settings.accent2 = F.DEFAULT_SETTINGS.accent2; dr.settings.accentOverride = false; }, { rerender: false }); renderThemeBody(); };
 ACT.mvGrp = (b) => commit("reorder groups", (dr) => { const i = Number(b.dataset.i), j = i + Number(b.dataset.d); if (j < 0 || j >= dr.groups.length) return; const [g] = dr.groups.splice(i, 1); dr.groups.splice(j, 0, g); });
 ACT.addGrp = () => {
   const label = $("#newGrp").value.trim();
