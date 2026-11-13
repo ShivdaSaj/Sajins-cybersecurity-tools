@@ -1,25 +1,57 @@
 # Website: cybersecuritytools.sajinshivdas.online
 
-A static, searchable front-end for the curated list in the repository's root `README.md`.
+A fast, searchable front-end for the curated list, plus an admin panel to manage it.
 
-- `site/index.html` is a single page with inline CSS/JS and no framework. It parses `data/README.md` in the browser, so the page structure always follows the source list.
-- `sync-readme.sh` re-downloads the README from GitHub at container start and every `SYNC_INTERVAL` seconds (default 6h). New tools pushed to `main` show up without a redeploy.
-- `nginx.conf` serves the site with gzip, short caching and security headers (CSP, nosniff, frame-deny).
-- `docker-compose.yml` runs stock `nginx:alpine`. At start-up it downloads `web/` from GitHub (branch `SITE_REF`, default `main`), so **Restart** in Docker Manager also deploys site changes. Traefik routes it (`websecure` entrypoint, `letsencrypt` resolver).
-- `Dockerfile` is an alternative self-contained image if you prefer building locally.
+## Layout
+
+| Path | What it is |
+|---|---|
+| `server/server.mjs` | Zero-dependency Node.js server (Node 20+). It serves the site, the public API and the admin API, and stores data in `DATA_DIR`. |
+| `site/index.html`, `site/assets/app.js` | The public site. The catalog is embedded in the page on the server, so it loads with a single request. It has search, filters, and a header clock where visitors can choose a time zone. |
+| `site/admin.html`, `admin.js`, `admin.css` | The admin panel at `/admin`. |
+| `site/assets/catalog-format.mjs` | The shared data model, used by the server and the panel: Markdown/YAML/JSON parsing, export and merge. |
+| `site/assets/vendor/js-yaml.mjs` | js-yaml 4.1.0 (MIT), vendored. |
+| `docker-compose.yml` | The Hostinger Docker Manager deployment (Traefik + Let's Encrypt). |
+
+## Admin panel (`/admin`)
+
+- **Catalog editor**:
+  - Add, insert above/below, duplicate, delete, reorder (buttons or drag & drop) and sort categories.
+  - Set each category's group, icon, description and source link.
+  - For entries: add, insert below, edit, duplicate, delete and reorder. Bulk move, copy, set licence, set section, export and delete. Undo works until you save.
+- **Import / Export**:
+  - Markdown (README style), YAML and JSON.
+  - Export the whole catalog, one group, one category, or entries selected in the editor.
+  - Import into the file's own categories, an existing category, or a new one. When an entry already exists you can update it, keep the existing one, or replace everything. You review every import before it is added.
+- **Ingest & snippets**:
+  - Scan any web page, "awesome list" or GitHub repository (its README is used automatically) and pick the links to insert.
+  - Add one tool from its URL (title and description are read from the page).
+  - Paste a snippet of Markdown, YAML, JSON or plain URLs.
+  - Pages are fetched by the server with SSRF protection: private and reserved addresses are blocked, and there are size and time limits.
+- **Backup & restore**:
+  - An automatic backup is made before every save and restore (the last 40 are kept), and you can also create manual backups.
+  - Download and restore server backups, or load a backup file into the editor.
+- **Customize site**: titles, hero text, notice, footer and attribution, accent colours, default theme, stats/favicon/animation toggles, and groups.
+- **Clock & time zone**: turn the clock on or off, set the default time zone, 12/24-hour, seconds, and whether visitors may pick their own zone.
+- **Security**: change the admin password (stored as a scrypt hash, which replaces `ADMIN_PASSWORD`). Sessions use HttpOnly, SameSite=Strict signed cookies, and failed sign-ins are rate-limited.
+
+Every **Save & publish** writes a new revision, which goes live immediately. Public downloads are at `/catalog.md`, `/catalog.yaml` and `/catalog.json`.
 
 ## Deploy / update
 
-On the VPS, use Hostinger Docker Manager with project `cybersecuritytools` and paste `docker-compose.yml`, or run:
+In Hostinger Docker Manager, create the project `cybersecuritytools` from `docker-compose.yml` and set these environment variables:
 
-```bash
-docker compose -p cybersecuritytools -f web/docker-compose.yml up -d
+```
+ADMIN_PASSWORD=<a long random password>
+SITE_REF=main
 ```
 
-Set the `SITE_REF` environment variable to serve the site code from a branch other than `main`.
+On first start the catalog is seeded from this repository's `README.md`. After that, the copy in the `cybersecuritytools-data` volume is the source of truth. To deploy new site code, restart the project; the catalog in the volume is kept.
 
-## Local preview
+## Local development
 
 ```bash
-docker build -f web/Dockerfile -t cybersecuritytools . && docker run --rm -p 8080:80 cybersecuritytools
+DATA_DIR=./data ADMIN_PASSWORD=change-me-please node web/server/server.mjs
 ```
+
+Then open http://localhost:8080 and http://localhost:8080/admin.

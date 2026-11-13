@@ -1,40 +1,58 @@
 # Deploy with Hostinger Docker Manager (project name: cybersecuritytools).
-# No image build needed: stock nginx:alpine pulls the site files from GitHub
-# at start-up (SITE_REF branch), and sync-readme.sh keeps the tool list fresh.
+# No image build needed: the stock Node image downloads the site code from GitHub
+# (branch SITE_REF) at start-up and runs the server + admin panel.
+# Catalog, settings, backups and the admin password hash live in the named volume.
 # Routed over HTTPS by the existing Traefik instance (Let's Encrypt).
+#
+# Required environment variable (set it in Docker Manager, never commit it):
+#   ADMIN_PASSWORD   initial admin password (can be changed later in the admin panel)
 services:
   cybersecuritytools:
-    image: nginx:1.27-alpine
+    image: node:22-alpine
     container_name: cybersecuritytools
     restart: unless-stopped
     environment:
+      - NODE_ENV=production
+      - PORT=8080
+      - DATA_DIR=/data
+      - RUN_AS_UID=1000
       - SITE_REF=${SITE_REF:-main}
-      - README_URL=https://raw.githubusercontent.com/ShivdaSaj/Sajins-cybersecurity-tools/main/README.md
-      - SYNC_INTERVAL=21600
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+    volumes:
+      - cybersecuritytools-data:/data
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         set -e
-        BASE="https://raw.githubusercontent.com/ShivdaSaj/Sajins-cybersecurity-tools/$${SITE_REF}/web"
-        H=/usr/share/nginx/html
-        mkdir -p "$$H/data"
-        wget -q -T 30 -O /etc/nginx/conf.d/default.conf "$$BASE/nginx.conf"
-        wget -q -T 30 -O /etc/nginx/security-headers.conf "$$BASE/security-headers.conf"
-        wget -q -T 30 -O /docker-entrypoint.d/90-sync-readme.sh "$$BASE/sync-readme.sh"
-        wget -q -T 30 -O "$$H/index.html.tmp" "$$BASE/site/index.html"
-        mv "$$H/index.html.tmp" "$$H/index.html"
-        chmod +x /docker-entrypoint.d/90-sync-readme.sh
-        exec /docker-entrypoint.sh nginx -g 'daemon off;'
+        SRC="https://codeload.github.com/ShivdaSaj/Sajins-cybersecurity-tools/tar.gz/refs/heads/$${SITE_REF}"
+        mkdir -p /data /tmp/src
+        if wget -q -T 60 -O /tmp/site.tgz "$$SRC"; then
+          cp /tmp/site.tgz /data/.site-cache.tgz
+        elif [ -f /data/.site-cache.tgz ]; then
+          echo "GitHub unreachable, using cached site code"
+          cp /data/.site-cache.tgz /tmp/site.tgz
+        else
+          echo "Cannot download site code from $$SRC" >&2
+          exit 1
+        fi
+        tar -xzf /tmp/site.tgz -C /tmp/src
+        mkdir -p /app
+        cp -r /tmp/src/*/. /app/
+        chown -R 1000:1000 /data
+        exec node /app/web/server/server.mjs
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/healthz"]
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/healthz"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 20s
+      start_period: 40s
     labels:
       - traefik.enable=true
       - traefik.http.routers.cybersecuritytools.rule=Host(`cybersecuritytools.sajinshivdas.online`)
       - traefik.http.routers.cybersecuritytools.entrypoints=websecure
       - traefik.http.routers.cybersecuritytools.tls=true
       - traefik.http.routers.cybersecuritytools.tls.certresolver=letsencrypt
-      - traefik.http.services.cybersecuritytools.loadbalancer.server.port=80
+      - traefik.http.services.cybersecuritytools.loadbalancer.server.port=8080
+
+volumes:
+  cybersecuritytools-data:

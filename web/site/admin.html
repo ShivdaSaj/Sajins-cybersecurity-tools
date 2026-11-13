@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Admin · Cybersecurity Tools</title>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="admin.css">
+<script type="module" src="admin.js"></script>
+</head>
+<body>
+
+<!-- login -->
+<div id="login" class="login" hidden>
+  <form id="loginForm" class="login-card" autocomplete="on">
+    <img src="assets/favicon.svg" alt="" width="44" height="44">
+    <h1>Admin sign-in</h1>
+    <p class="muted" id="loginNote">Manage the curated catalog, appearance and backups.</p>
+    <label class="fld"><span>Password</span><input type="password" id="loginPw" autocomplete="current-password" required></label>
+    <button class="btn primary" type="submit" id="loginBtn">Sign in</button>
+    <p class="err" id="loginErr" role="alert"></p>
+    <a class="muted small" href="/">← Back to site</a>
+  </form>
+</div>
+
+<!-- app -->
+<div id="app" class="app" hidden>
+  <aside class="side" id="side">
+    <a class="brand" href="/" target="_blank" rel="noopener"><img src="assets/favicon.svg" alt="" width="26" height="26"><span>Catalog Admin<small>manage website</small></span></a>
+    <nav id="nav">
+      <button data-view="dashboard"><svg><use href="assets/icons.svg#c-radar"/></svg>Dashboard</button>
+      <button data-view="catalog"><svg><use href="assets/icons.svg#c-layers"/></svg>Catalog editor</button>
+      <button data-view="import"><svg><use href="assets/icons.svg#i-dl"/></svg>Import / Export</button>
+      <button data-view="ingest"><svg><use href="assets/icons.svg#c-search"/></svg>Ingest &amp; snippets</button>
+      <button data-view="backups"><svg><use href="assets/icons.svg#c-box"/></svg>Backup &amp; restore</button>
+      <button data-view="appearance"><svg><use href="assets/icons.svg#c-cms"/></svg>Customize site</button>
+      <button data-view="clock"><svg><use href="assets/icons.svg#i-clock"/></svg>Clock &amp; time zone</button>
+      <button data-view="security"><svg><use href="assets/icons.svg#c-lock"/></svg>Security</button>
+    </nav>
+    <div class="side-foot">
+      <a class="btn ghost" href="/" target="_blank" rel="noopener"><svg><use href="assets/icons.svg#i-ext"/></svg>View site</a>
+      <button class="btn ghost" id="logout">Sign out</button>
+    </div>
+  </aside>
+
+  <div class="mainpane">
+    <header class="topbar">
+      <button class="btn icon" id="menuBtn" aria-label="Menu">☰</button>
+      <h2 id="viewTitle">Dashboard</h2>
+      <div class="spacer"></div>
+      <span class="pill" id="dirtyPill" hidden>Unsaved changes</span>
+      <button class="btn" id="undoBtn" title="Undo (Ctrl+Z)" disabled>Undo</button>
+      <button class="btn" id="discardBtn" disabled>Discard</button>
+      <button class="btn primary" id="saveBtn" title="Save & publish (Ctrl+S)" disabled>Save &amp; publish</button>
+    </header>
+    <main id="view" class="view"></main>
+  </div>
+</div>
+
+<!-- item editor -->
+<dialog id="itemDlg" class="dlg">
+  <form method="dialog" id="itemForm">
+    <h3 id="itemDlgTitle">Edit entry</h3>
+    <div class="grid2">
+      <label class="fld"><span>Name *</span><input name="name" required maxlength="200"></label>
+      <label class="fld"><span>Category</span><select name="cat"></select></label>
+      <label class="fld span2"><span>URL</span><input name="url" type="url" placeholder="https://"></label>
+      <label class="fld span2"><span>Description</span><textarea name="desc" rows="3" maxlength="1500"></textarea></label>
+      <label class="fld"><span>Licence</span><select name="lic"><option value="">Not specified</option><option value="F">Free / open source</option><option value="C">Commercial</option><option value="F/C">Free with paid tier</option></select></label>
+      <label class="fld"><span>Section (sub-heading)</span><input name="sub" list="subList" maxlength="120"><datalist id="subList"></datalist></label>
+      <fieldset class="fld span2"><legend>Platforms</legend>
+        <label class="chk"><input type="checkbox" name="os" value="Linux"> Linux</label>
+        <label class="chk"><input type="checkbox" name="os" value="macOS"> macOS</label>
+        <label class="chk"><input type="checkbox" name="os" value="Windows"> Windows</label>
+      </fieldset>
+      <label class="fld span2"><span>Extra links (one per line)</span><textarea name="links" rows="2" placeholder="https://docs.example.com"></textarea></label>
+    </div>
+    <p class="err" id="itemErr"></p>
+    <div class="dlg-actions">
+      <button class="btn" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn primary" value="ok" id="itemOk">Apply</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- confirm -->
+<dialog id="confirmDlg" class="dlg small">
+  <form method="dialog">
+    <h3 id="confirmTitle">Are you sure?</h3>
+    <p id="confirmText" class="muted"></p>
+    <div class="dlg-actions">
+      <button class="btn" value="cancel">Cancel</button>
+      <button class="btn danger" value="ok" id="confirmOk">Confirm</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toasts" class="toasts" aria-live="polite"></div>
+</body>
+</html>
