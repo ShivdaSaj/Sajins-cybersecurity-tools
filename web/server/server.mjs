@@ -207,6 +207,36 @@ function noteFailure(ip) {
   if (attempts.size > 5000) for (const [k, v] of attempts) if (v.reset < now) attempts.delete(k);
 }
 
+/* ---------------- newsletter subscribers (footer form) ---------------- */
+const SUBS_FILE = () => path.join(DATA_DIR, "subscribers.json");
+const SUBS_MAX = 50000;
+const subHits = new Map();
+let subsQueue = Promise.resolve();
+const EMAIL_RE = /^[^\s@<>"'(),;:\\]{1,64}@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i;
+function subLimited(ip) {
+  const now = Date.now();
+  const a = subHits.get(ip);
+  if (!a || a.reset < now) { subHits.set(ip, { count: 1, reset: now + 3600e3 }); }
+  else if (++a.count > 6) return true;
+  if (subHits.size > 5000) for (const [k, v] of subHits) if (v.reset < now) subHits.delete(k);
+  return false;
+}
+async function readSubs() {
+  const d = await readJSON(SUBS_FILE(), null);
+  return Array.isArray(d && d.subscribers) ? d.subscribers : [];
+}
+/** Serialise read-modify-write of the subscriber file. */
+function withSubs(fn) {
+  const run = subsQueue.then(async () => {
+    const list = await readSubs();
+    const out = await fn(list);
+    await writeJSONAtomic(SUBS_FILE(), { subscribers: list });
+    return out;
+  });
+  subsQueue = run.catch(() => {});
+  return run;
+}
+
 function parseCookies(req) {
   const out = {};
   for (const part of String(req.headers.cookie || "").split(";")) {
@@ -484,6 +514,25 @@ async function handleApi(req, res, url) {
     return json(res, 200, { ok: true });
   }
 
+  if (p === "/api/subscribe" && m === "POST") {
+    const sub = (catalog.settings.footer || {}).subscribe || {};
+    if (catalog.settings.footer?.enabled === false || sub.mode !== "local") return json(res, 404, { error: "Subscriptions are closed." });
+    const body = await readBody(req, 2048);
+    if (body.company) return json(res, 200, { ok: true }); // honeypot field filled in: a bot
+    const email = String(body.email || "").trim().toLowerCase();
+    if (email.length > 200 || !EMAIL_RE.test(email)) return json(res, 400, { error: "Please enter a valid email address." });
+    if (subLimited(clientIp(req))) return json(res, 429, { error: "Too many attempts. Please try again later." });
+    const r = await withSubs((list) => {
+      if (list.some((x) => x.email === email)) return "exists";
+      if (list.length >= SUBS_MAX) return "full";
+      list.push({ email, at: new Date().toISOString() });
+      return "added";
+    });
+    if (r === "full") return json(res, 503, { error: "Subscriptions are temporarily unavailable." });
+    if (r === "added") log("new subscriber");
+    return json(res, 200, { ok: true });
+  }
+
   if (!p.startsWith("/api/admin/") && p !== "/api/auth/password") return json(res, 404, { error: "Not found" });
   if (!isAdmin(req)) return json(res, 401, { error: "Not signed in" });
 
@@ -561,6 +610,20 @@ async function handleApi(req, res, url) {
     const st = await sync.check();
     if (st.state.remoteState === "in-sync" && st.state.lastPullAt && Date.now() - Date.parse(st.state.lastPullAt) < 5000) return json(res, 200, { ...st, applied: true, catalog });
     return json(res, 200, st);
+  }
+
+  if (p === "/api/admin/subscribers" && m === "GET") return json(res, 200, { subscribers: await readSubs() });
+  if (p === "/api/admin/subscribers/delete" && m === "POST") {
+    const body = await readBody(req, 4 * 1024 * 1024);
+    const drop = new Set((Array.isArray(body.emails) ? body.emails : []).map((e) => String(e).toLowerCase()));
+    const removed = await withSubs((list) => {
+      const before = list.length;
+      const keep = body.all === true ? [] : list.filter((x) => !drop.has(x.email));
+      list.splice(0, list.length, ...keep);
+      return before - list.length;
+    });
+    log(`removed ${removed} subscriber(s)`);
+    return json(res, 200, { removed, subscribers: await readSubs() });
   }
 
   if (p === "/api/admin/fetch" && m === "POST") {

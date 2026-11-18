@@ -140,9 +140,75 @@ mark{background:var(--mark);color:inherit;border-radius:3px;padding:0 1px}
 .notice svg{width:18px;height:18px;flex:none;color:var(--warn);margin-top:1px}
 .notice button{margin-left:auto;border:0;background:none;color:var(--muted);cursor:pointer;font-size:18px;line-height:1}
 
-footer{position:relative;z-index:1;border-top:1px solid var(--line);padding:28px 0 40px;color:var(--muted);font-size:13px}
-footer .wrap{display:flex;flex-wrap:wrap;gap:14px 28px;align-items:center}
-footer a{color:var(--accent)}
+/* footer */
+.sfoot{position:relative;z-index:1;padding:26px 0 34px;color:var(--muted);font-size:14px}
+.sfoot[hidden]{display:none}
+.fpanel{position:relative;border-radius:calc(var(--r-lg) + 8px);border:1px solid var(--line);background:linear-gradient(135deg,color-mix(in srgb,var(--accent2) 7%,var(--panel)),var(--panel) 45%,color-mix(in srgb,var(--accent) 9%,var(--panel)));box-shadow:var(--shadow);padding:40px 40px 26px;overflow:hidden;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.fpanel::before{content:"";position:absolute;inset:0 0 auto;height:3px;background:linear-gradient(90deg,var(--accent2),var(--accent) 55%,var(--accent3,var(--accent)))}
+.fpanel::after{content:"";position:absolute;width:420px;height:420px;right:-140px;top:-180px;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--accent) 16%,transparent),transparent 65%);pointer-events:none}
+.fgrid{position:relative;z-index:1;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,2fr) minmax(0,1.1fr);gap:32px 40px;align-items:start}
+.fgrid.nosub{grid-template-columns:minmax(0,1.25fr) minmax(0,2fr)}
+.fgrid.nocols{grid-template-columns:minmax(0,1.6fr) minmax(0,1.1fr)}
+.fgrid.nosub.nocols{grid-template-columns:minmax(0,1fr)}
+.fname{font-size:26px;font-weight:800;letter-spacing:-.4px;line-height:1.2;background:linear-gradient(92deg,var(--accent2),var(--accent));-webkit-background-clip:text;background-clip:text;color:transparent;width:fit-content;max-width:100%}
+.fabout{margin:14px 0 0;line-height:1.75;font-size:15px;max-width:420px}
+.fsocial{display:flex;flex-wrap:wrap;gap:12px;margin-top:22px}
+.fsocial a{width:44px;height:44px;display:grid;place-items:center;border-radius:var(--r-sm);border:1px solid var(--line2);background:var(--panel-solid);color:var(--text);box-shadow:0 2px 6px rgba(0,0,0,.06);transition:transform .15s,border-color .15s,color .15s,box-shadow .15s}
+.fsocial a:hover{transform:translateY(-2px);border-color:var(--accent);color:var(--accent);box-shadow:0 8px 20px -10px var(--accent)}
+.fsocial svg{width:21px;height:21px}
+.fcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:28px}
+.fcol h4{margin:4px 0 18px;font:700 12.5px/1 var(--sans);letter-spacing:2px;text-transform:uppercase;color:var(--dim)}
+.fcol ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:14px}
+.fcol a{color:var(--text);opacity:.86;font-size:15.5px;transition:color .15s,opacity .15s,padding .15s}
+.fcol a:hover{color:var(--accent);opacity:1;padding-left:3px}
+.fsub{position:relative;padding:22px;border-radius:var(--r-lg);border:1px solid var(--line2);background:color-mix(in srgb,var(--panel-solid) 82%,transparent);box-shadow:0 10px 30px -18px rgba(0,0,0,.4)}
+.fsub h3{margin:0 0 16px;font-size:17px;line-height:1.45;color:var(--text)}
+.fsub input{width:100%;height:46px;border-radius:var(--r-sm);border:1px solid var(--line2);background:var(--bg2);padding:0 14px;font-size:15px}
+.fsub input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent)}
+.fsub input::placeholder{color:var(--dim)}
+.fsub input.hp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+.fsub button{width:100%;height:46px;margin-top:12px;border:0;border-radius:var(--r-sm);cursor:pointer;font-weight:700;font-size:15.5px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35);background:linear-gradient(90deg,var(--accent2),var(--accent));box-shadow:0 10px 24px -12px var(--accent2);transition:filter .15s,transform .15s}
+.fsub button:hover{filter:brightness(1.08);transform:translateY(-1px)}
+.fsub button:disabled{opacity:.6;cursor:progress}
+.fsubmsg{margin:10px 0 0;font-size:13px;min-height:0}
+.fsubmsg:empty{display:none}
+.fsubmsg.ok{color:var(--good)}.fsubmsg.bad{color:var(--bad,#f55)}
+.fbottom{position:relative;z-index:1;display:flex;flex-wrap:wrap;gap:16px 28px;align-items:center;justify-content:space-between;margin-top:34px;padding-top:22px;border-top:1px solid var(--line)}
+.fbottom.solo{margin-top:0;padding-top:0;border-top:0}
+.fleft{display:flex;flex-direction:column;gap:6px;min-width:0;flex:1 1 380px}
+.fcopy{color:var(--text);opacity:.9;font-size:15px}
+.fnote,.fmeta{font-size:13px;color:var(--muted)}
+.fnote a,.fmeta a{color:var(--text);text-decoration:underline;text-underline-offset:3px;text-decoration-color:color-mix(in srgb,var(--accent) 60%,transparent)}
+.fnote a:hover,.fmeta a:hover{color:var(--accent)}
+.fmeta{display:flex;flex-wrap:wrap;gap:4px 16px;align-items:center}
+.fmeta>span:empty{display:none}
+.flinks{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;flex:0 1 auto}
+.flinks a{padding:2px 16px;font-size:15px;color:var(--muted);border-left:1px solid var(--line2);transition:color .15s}
+.flinks a:first-child{border-left:0}
+.flinks a:last-child{padding-right:0}
+.flinks a:hover{color:var(--accent)}
+/* footer styles */
+.sfoot[data-style="flat"] .fpanel{border-radius:0;border-width:1px 0 0;background:transparent;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;padding:40px 0 10px}
+.sfoot[data-style="flat"] .fpanel::after{display:none}
+.sfoot[data-style="minimal"] .fpanel{border:0;background:none;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;padding:22px 0 0;border-top:1px solid var(--line);border-radius:0}
+.sfoot[data-style="minimal"] .fpanel::before,.sfoot[data-style="minimal"] .fpanel::after{display:none}
+.sfoot[data-style="minimal"] .fname{font-size:19px}
+.sfoot[data-style="minimal"] .fsocial a{width:36px;height:36px}
+@media (max-width: 1080px){
+  .fgrid,.fgrid.nocols{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .fgrid .fcols{grid-column:1/-1;grid-row:2}
+  .fgrid.nosub .fcols{grid-column:auto;grid-row:auto}
+}
+@media (max-width: 700px){
+  .fpanel{padding:28px 20px 20px}
+  .fgrid,.fgrid.nosub,.fgrid.nocols{grid-template-columns:minmax(0,1fr)}
+  .fgrid .fcols,.fgrid.nosub .fcols{grid-column:auto;grid-row:auto}
+  .fcols{grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
+  .fbottom{flex-direction:column;align-items:flex-start}
+  .fleft{flex-basis:auto}
+  .flinks{justify-content:flex-start;gap:8px 20px}.flinks a{padding:0;border:0;font-size:14px}
+  .fname{font-size:23px}
+}
 .skeleton{height:150px;border-radius:var(--radius);background:linear-gradient(90deg,var(--panel) 0%,var(--bg2) 50%,var(--panel) 100%);background-size:200% 100%;animation:sh 1.2s infinite}
 @keyframes sh{to{background-position:-200% 0}}
 #totop{position:fixed;right:16px;bottom:16px;z-index:30;opacity:0;pointer-events:none;transition:opacity .2s}
@@ -215,8 +281,8 @@ body{transition:background-color .3s,color .3s}
 .pop .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .pop .btn{height:32px;font-size:12.5px}
 .pop label.chk{display:inline-flex;gap:6px;align-items:center;font-size:12.5px;color:var(--muted);margin-left:auto}
-footer .dl a{display:inline-flex;gap:5px;align-items:center}
-footer .dl svg{width:13px;height:13px}
+.sfoot .dl a{display:inline-flex;gap:5px;align-items:center}
+.sfoot .dl svg{width:13px;height:13px}
 @media (max-width: 760px){.clock .cd{display:none}}
 @media (max-width: 420px){.clock{padding:0 9px;gap:7px}.clock svg{display:none}.brand{font-size:14px;gap:8px}.brand>span{max-width:128px;white-space:nowrap}.bar{gap:8px}}
 </style>
@@ -318,12 +384,38 @@ footer .dl svg{width:13px;height:13px}
   </div>
 </main>
 
-<footer>
+<footer id="siteFoot" class="sfoot" data-style="card">
   <div class="wrap">
-    <div id="footSrc"></div>
-    <div id="synced"></div>
-    <div class="dl">Download list: <a href="catalog.md" download><svg><use href="assets/icons.svg#i-dl"/></svg>Markdown</a> · <a href="catalog.yaml" download><svg><use href="assets/icons.svg#i-dl"/></svg>YAML</a></div>
-    <div style="margin-left:auto">Tags: <span class="tag free">FREE</span> open source / free · <span class="tag paid">PAID</span> commercial tier</div>
+    <div class="fpanel">
+      <div class="fgrid" id="fGrid">
+        <div class="fbrand">
+          <div class="fname" id="fBrand"></div>
+          <p class="fabout" id="fAbout"></p>
+          <div class="fsocial" id="fSocial"></div>
+        </div>
+        <div class="fcols" id="fCols"></div>
+        <form class="fsub" id="fSub" novalidate>
+          <h3 id="fSubTitle"></h3>
+          <label class="sr" for="fSubEmail">Email address</label>
+          <input type="email" id="fSubEmail" name="email" autocomplete="email" required maxlength="200">
+          <input type="text" name="company" id="fSubHp" tabindex="-1" autocomplete="off" class="hp" aria-hidden="true">
+          <button type="submit" id="fSubBtn"></button>
+          <p class="fsubmsg" id="fSubMsg" role="status" aria-live="polite"></p>
+        </form>
+      </div>
+      <div class="fbottom">
+        <div class="fleft">
+          <div class="fcopy" id="fCopy"></div>
+          <div class="fnote" id="fNote"></div>
+          <div class="fmeta" id="fMeta">
+            <span class="dl" id="fDl">Download list: <a href="catalog.md" download><svg><use href="assets/icons.svg#i-dl"/></svg>Markdown</a> · <a href="catalog.yaml" download><svg><use href="assets/icons.svg#i-dl"/></svg>YAML</a></span>
+            <span id="synced"></span>
+            <span id="fLegend">Tags: <span class="tag free">FREE</span> open source / free · <span class="tag paid">PAID</span> commercial tier</span>
+          </div>
+        </div>
+        <nav class="flinks" id="fLinks" aria-label="Footer"></nav>
+      </div>
+    </div>
   </div>
 </footer>
 <button class="btn icon" id="totop" aria-label="Back to top">↑</button>

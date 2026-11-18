@@ -53,12 +53,109 @@ function applySettings() {
   $("q").placeholder = s.searchPlaceholder || "Search…";
   $("legalText").textContent = s.legalText || "";
   $("stats").hidden = s.showStats === false;
-  var fs = $("footSrc"); fs.textContent = "";
-  if (s.sourceUrl) {
-    fs.appendChild(document.createTextNode((s.footerText || "Source:") + " "));
-    var a = document.createElement("a"); a.href = s.sourceUrl; a.target = "_blank"; a.rel = "noopener"; a.textContent = s.sourceLabel || hostOf(s.sourceUrl);
-    fs.appendChild(a);
-  } else if (s.footerText) fs.textContent = s.footerText;
+  renderFooter(s.footer);
+}
+
+/* ---------------- footer ---------------- */
+var SOCIAL_ICON = { web: "i-globe", github: "i-gh" };
+function linkOk(u) { return typeof u === "string" && (/^https?:\/\//i.test(u) || /^mailto:/i.test(u) || /^\/(?!\/)/.test(u) || /^#/.test(u)) ? u : ""; }
+function mkLink(label, url, cls) {
+  var a = document.createElement("a");
+  a.textContent = label || url;
+  if (cls) a.className = cls;
+  var u = linkOk(url);
+  if (u) {
+    a.href = u;
+    if (/^https?:/i.test(u) && hostOf(u) !== location.hostname) { a.target = "_blank"; a.rel = "noopener"; }
+  }
+  return a;
+}
+/** Text with [label](url) links, built with DOM nodes (no HTML injection). */
+function richText(el, text) {
+  el.textContent = "";
+  String(text || "").replace(/\{year\}/g, String(new Date().getFullYear())).split(/(\[[^\]]+\]\([^)\s]+\))/).forEach(function (part) {
+    var m = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(part);
+    if (m && linkOk(m[2])) el.appendChild(mkLink(m[1], m[2]));
+    else if (part) el.appendChild(document.createTextNode(m ? m[1] : part));
+  });
+}
+var FOOT = {};
+function renderFooter(f) {
+  f = f || {};
+  FOOT = f;
+  var foot = $("siteFoot");
+  foot.hidden = f.enabled === false;
+  foot.setAttribute("data-style", f.style || "card");
+  $("fBrand").textContent = f.brand || "";
+  $("fBrand").hidden = !f.brand;
+  $("fAbout").textContent = f.about || "";
+  $("fAbout").hidden = !f.about;
+  var so = $("fSocial"); so.textContent = "";
+  (f.social || []).forEach(function (x) {
+    if (!linkOk(x.url)) return;
+    var a = mkLink("", x.url);
+    a.textContent = "";
+    var name = x.label || x.type;
+    a.setAttribute("aria-label", name); a.title = name;
+    a.innerHTML = '<svg aria-hidden="true"><use href="' + ICONS + esc(SOCIAL_ICON[x.type] || "s-" + (x.type || "link")) + '"/></svg>';
+    so.appendChild(a);
+  });
+  so.hidden = !so.childNodes.length;
+  var hasBrand = !!(f.brand || f.about || so.childNodes.length);
+  var cols = $("fCols"); cols.textContent = "";
+  (f.columns || []).forEach(function (c) {
+    var links = (c.links || []).filter(function (l) { return l.label || l.url; });
+    if (!c.title && !links.length) return;
+    var d = document.createElement("div"); d.className = "fcol";
+    if (c.title) { var h = document.createElement("h4"); h.textContent = c.title; d.appendChild(h); }
+    var ul = document.createElement("ul");
+    links.forEach(function (l) { var li = document.createElement("li"); li.appendChild(mkLink(l.label, l.url)); ul.appendChild(li); });
+    d.appendChild(ul); cols.appendChild(d);
+  });
+  cols.hidden = !cols.childNodes.length;
+  var sub = f.subscribe || {}, subOn = sub.mode === "local" || (sub.mode === "link" && sub.url);
+  var form = $("fSub");
+  form.hidden = !subOn;
+  $("fSubTitle").textContent = sub.title || ""; $("fSubTitle").hidden = !sub.title;
+  $("fSubEmail").placeholder = sub.placeholder || "Your email";
+  $("fSubBtn").textContent = sub.button || "Subscribe";
+  var grid = $("fGrid");
+  grid.hidden = !hasBrand && cols.hidden && !subOn;
+  grid.querySelector(".fbrand").hidden = !hasBrand;
+  grid.classList.toggle("nosub", !subOn);
+  grid.classList.toggle("nocols", cols.hidden);
+  richText($("fCopy"), f.copyright); $("fCopy").hidden = !f.copyright;
+  richText($("fNote"), f.note); $("fNote").hidden = !f.note;
+  $("fDl").hidden = f.showDownloads === false;
+  $("synced").hidden = f.showUpdated === false;
+  $("fLegend").hidden = f.showLegend === false;
+  var bl = $("fLinks"); bl.textContent = "";
+  (f.bottomLinks || []).forEach(function (l) { if (l.label || l.url) bl.appendChild(mkLink(l.label, l.url)); });
+  bl.hidden = !bl.childNodes.length;
+  foot.querySelector(".fbottom").classList.toggle("solo", grid.hidden);
+}
+function initSubscribe() {
+  var form = $("fSub"), msg = $("fSubMsg"), btn = $("fSubBtn"), inp = $("fSubEmail");
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var sub = FOOT.subscribe || {}, email = inp.value.trim();
+    msg.className = "fsubmsg"; msg.textContent = "";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { msg.className = "fsubmsg bad"; msg.textContent = "Please enter a valid email address."; inp.focus(); return; }
+    if (sub.mode === "link" && linkOk(sub.url)) {
+      window.open(sub.url.replace(/\{email\}/g, encodeURIComponent(email)), "_blank", "noopener");
+      return;
+    }
+    if (new URLSearchParams(location.search).has("preview")) { msg.className = "fsubmsg ok"; msg.textContent = sub.success || "Subscribed (preview — nothing was saved)."; return; }
+    btn.disabled = true;
+    fetch("/api/subscribe", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "X-Requested-With": "cst-admin" }, body: JSON.stringify({ email: email, company: $("fSubHp").value }) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (r) {
+        if (r.ok) { msg.className = "fsubmsg ok"; msg.textContent = sub.success || "Thanks for subscribing!"; inp.value = ""; }
+        else { msg.className = "fsubmsg bad"; msg.textContent = (r.d && r.d.error) || "Something went wrong. Please try again."; }
+      })
+      .catch(function () { msg.className = "fsubmsg bad"; msg.textContent = "Network error. Please try again."; })
+      .then(function () { btn.disabled = false; });
+  });
 }
 
 /* ---------------- state ---------------- */
@@ -411,6 +508,11 @@ addEventListener("message", function (e) {
   $("accentStyle").textContent = s.accentOverride && ok.test(s.accent || "") && ok.test(s.accent2 || "") ? ":root:root[data-skin]{--accent:" + s.accent + ";--accent2:" + s.accent2 + "}" : "";
   if (s.showFavicons !== undefined && DB) { SET.showFavicons = s.showFavicons; }
   if (s.showStats !== undefined) $("stats").hidden = s.showStats === false;
+  if (s.footer) renderFooter(s.footer);
+  if (e.data.scrollFooter) {
+    var n = 0, toEnd = function () { window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" }); if (++n < 4) requestAnimationFrame(toEnd); };
+    toEnd();
+  }
   setSkin(TH.meta[e.data.skin] ? e.data.skin : s.theme || "cyber");
   if (DB) render();
 });
@@ -497,6 +599,7 @@ themeColorMeta();
 function start(data) {
   DB = build(data);
   applySettings();
+  initSubscribe();
   $("legal").hidden = !(SET.legalEnabled !== false && SET.legalText && store("legal") !== "x");
   $("fKind").innerHTML = '<button data-v="" aria-pressed="true">All</button>' + DB.groups.map(function (g) { return '<button data-v="' + esc(g.id) + '" aria-pressed="false">' + esc(g.label) + "</button>"; }).join("");
   $("fKind").hidden = DB.groups.length < 2;

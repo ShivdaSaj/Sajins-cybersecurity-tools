@@ -67,7 +67,7 @@ const S = {
 const views = {
   dashboard: ["Dashboard", renderDashboard], catalog: ["Catalog editor", renderCatalog], import: ["Import / Export", renderImport],
   ingest: ["Ingest & snippets", renderIngest], backups: ["Backup & restore", renderBackups], appearance: ["Site content", renderAppearance], themes: ["Themes & appearance", renderThemes],
-  clock: ["Clock & time zone", renderClock], github: ["GitHub sync", renderGitHub], security: ["Security", renderSecurity],
+  footer: ["Footer", renderFooter], clock: ["Clock & time zone", renderClock], github: ["GitHub sync", renderGitHub], security: ["Security", renderSecurity],
 };
 const strip = (c) => JSON.stringify({ settings: c.settings, groups: c.groups, categories: c.categories });
 const dirty = () => S.draft && strip(S.draft) !== S.savedStr;
@@ -1123,12 +1123,10 @@ function renderAppearance(el) {
     ${setField("eyebrow", "Small label above the headline")}${setField("searchPlaceholder", "Search box placeholder")}
     ${setField("heroTitle", "Headline", "text", "span2")}${setField("heroText", "Intro text", "area", "span2")}
   </div></div>
-  <div class="panel"><h3>Notice &amp; footer</h3><div class="grid2">
+  <div class="panel"><h3>Notice</h3><div class="grid2">
     <div class="fld span2">${setField("legalEnabled", "Show the legal &amp; ethical-use notice", "check")}</div>
     ${setField("legalText", "Notice text", "area", "span2")}
-    ${setField("footerText", "Footer attribution text")}${setField("sourceLabel", "Attribution link text")}
-    ${setField("sourceUrl", "Attribution link URL (leave empty to hide)", "url", "span2")}
-  </div></div>
+  </div><p class="small muted">The footer has its own page: <a href="#footer" data-act="goto" data-v="footer">Footer</a>.</p></div>
   <div class="panel"><h3>Groups</h3><p class="muted">Groups organise categories in the sidebar and the filter buttons on the site (for example Tools, Learning, Compliance).</p>
     <div class="list">${S.draft.groups.map((g, i) => {
       const used = cats().filter((c) => c.group === g.id).length;
@@ -1161,7 +1159,7 @@ function previewSkin() { return S.previewSkin && themeById(S.previewSkin) ? S.pr
 function sendPreview() {
   const f = $("#tPrev");
   if (!f || !f.contentWindow) return;
-  f.contentWindow.postMessage({ type: "cst-preview", skin: previewSkin(), settings: S.draft.settings }, location.origin);
+  f.contentWindow.postMessage({ type: "cst-preview", skin: previewSkin(), settings: S.draft.settings, scrollFooter: S.view === "footer" }, location.origin);
   const lbl = $("#tPrevLbl");
   if (lbl) lbl.textContent = (themeById(previewSkin()) || {}).name + (S.previewSkin && S.previewSkin !== S.draft.settings.theme ? " (previewing)" : " (default)");
 }
@@ -1415,6 +1413,191 @@ ACT.ghPull = () => ghAction(async () => {
   toast("GitHub version loaded — review it, then Save & publish", "ok", 7000);
   go("catalog");
 });
+
+/* =========================================================================
+   footer editor
+   ========================================================================= */
+const ft = () => {
+  if (!S.draft.settings.footer || typeof S.draft.settings.footer !== "object") S.draft.settings.footer = clone(F.DEFAULT_FOOTER);
+  return S.draft.settings.footer;
+};
+function getPath(o, path) { return path.split(".").reduce((a, k) => (a == null ? a : a[k]), o); }
+function setPath(o, path, v) {
+  const ks = path.split(".");
+  const last = ks.pop();
+  const t = ks.reduce((a, k) => (a[k] == null ? (a[k] = {}) : a[k]), o);
+  t[last] = v;
+}
+const fpVal = (path) => { const v = getPath(ft(), path); return v == null ? "" : v; };
+function fField(path, label, type = "text", extra = "", attrs = "") {
+  const v = fpVal(path);
+  if (type === "check") return `<label class="chk"><input type="checkbox" data-fp="${path}" ${v ? "checked" : ""}> ${label}</label>`;
+  if (type === "area") return `<label class="fld ${extra}"><span>${label}</span><textarea data-fp="${path}" rows="3" ${attrs}>${esc(v)}</textarea></label>`;
+  return `<label class="fld ${extra}"><span>${label}</span><input data-fp="${path}" type="${type}" value="${esc(v)}" ${attrs}></label>`;
+}
+function fSelect(path, label, opts, extra = "") {
+  const v = fpVal(path);
+  return `<label class="fld ${extra}"><span>${label}</span><select data-fp="${path}">${opts.map(([k, l]) => `<option value="${esc(k)}"${k === v ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></label>`;
+}
+const linkBad = (u) => !!(u && u.trim() && !F.safeLink(u.trim()));
+function linkRows(listPath, max, { social = false } = {}) {
+  const list = getPath(ft(), listPath) || [];
+  const rows = list.map((l, i) => {
+    const p = `${listPath}.${i}`;
+    return `<div class="li frow">
+      ${social ? `<select data-fp="${p}.type" aria-label="Network">${F.SOCIAL_TYPES.map(([k, n]) => `<option value="${k}"${k === l.type ? " selected" : ""}>${esc(n)}</option>`).join("")}</select>` : ""}
+      <input data-fp="${p}.label" value="${esc(l.label)}" placeholder="${social ? "Tooltip (optional)" : "Link text"}" maxlength="80" aria-label="Label">
+      <input data-fp="${p}.url" data-link="1" value="${esc(l.url)}" placeholder="https://…  /path  mailto:…" class="grow${linkBad(l.url) ? " invalid" : ""}" aria-label="URL">
+      <span class="mv" style="display:flex"><button data-act="fMove" data-p="${listPath}" data-i="${i}" data-d="-1" title="Move up" ${i ? "" : "disabled"}>▲</button><button data-act="fMove" data-p="${listPath}" data-i="${i}" data-d="1" title="Move down" ${i < list.length - 1 ? "" : "disabled"}>▼</button></span>
+      <button class="btn xs danger" data-act="fDel" data-p="${listPath}" data-i="${i}" title="Remove">✕</button></div>`;
+  }).join("");
+  return `<div class="list flist">${rows || `<div class="li small muted">None yet.</div>`}</div>
+    <div class="row" style="margin-top:8px"><button class="btn sm" data-act="fAdd" data-p="${listPath}" data-kind="${social ? "social" : "link"}" ${list.length >= max ? "disabled" : ""}>+ Add ${social ? "social link" : "link"}</button><span class="small muted">${list.length}/${max}</span></div>`;
+}
+function renderFooter(el) {
+  el.innerHTML = `<div class="themes-layout">
+    <div id="footBody"></div>
+    <aside class="tprev-wrap">
+      <div class="panel tprev-panel">
+        <div class="row" style="margin-bottom:8px"><h3>Live preview</h3><span class="spacer"></span>
+          <div class="tabs" style="margin:0"><button data-act="prevDev" data-d="desk" aria-selected="${S.prevDev !== "mobile"}">Desktop</button><button data-act="prevDev" data-d="mobile" aria-selected="${S.prevDev === "mobile"}">Mobile</button></div></div>
+        <div class="small muted" style="margin-bottom:8px">Shown in the default theme. Unsaved changes are previewed here only; <b>Save &amp; publish</b> makes them live.</div>
+        <div class="tprev-frame ${S.prevDev === "mobile" ? "mobile" : ""}"><iframe id="tPrev" src="/?preview=1" title="Site preview" loading="eager"></iframe></div>
+      </div>
+    </aside></div>`;
+  S.previewSkin = "";
+  $("#tPrev").addEventListener("load", sendPreview);
+  renderFooterBody();
+  loadSubscribers();
+}
+function renderFooterBody() {
+  const box = $("#footBody");
+  if (!box) return;
+  const f = ft(), sub = f.subscribe || {};
+  const cols = f.columns || [];
+  box.innerHTML = `
+  <div class="panel"><h3>Layout</h3><p class="muted">The footer follows the active theme's colours, fonts and corner style automatically.</p>
+    <div class="grid2">
+      <div class="fld span2">${fField("enabled", "Show the footer", "check")}</div>
+      ${fSelect("style", "Style", [["card", "Card: rounded panel with a gradient top edge"], ["flat", "Flat: full width, divider line on top"], ["minimal", "Minimal: compact, no panel"]])}
+      <div class="fld"><span>Catalog details in the bottom bar</span><div class="row" style="gap:14px">
+        ${fField("showDownloads", "Download links", "check")}${fField("showUpdated", "Last updated", "check")}${fField("showLegend", "Tag legend", "check")}</div></div>
+    </div></div>
+
+  <div class="panel"><h3>Brand &amp; about</h3><div class="grid2">
+    ${fField("brand", "Name (shown with the theme's gradient)", "text", "", 'maxlength="80"')}
+    <div></div>
+    ${fField("about", "About text", "area", "span2", 'maxlength="600"')}
+  </div></div>
+
+  <div class="panel"><h3>Social links</h3><p class="muted">Shown as icon buttons under the about text. Up to 12.</p>
+    ${linkRows("social", 12, { social: true })}</div>
+
+  <div class="panel"><div class="row"><h3>Link columns</h3><span class="spacer"></span><button class="btn sm primary" data-act="fAddCol" ${cols.length >= 4 ? "disabled" : ""}>+ Add column</button></div>
+    <p class="muted">Columns such as <i>Quick links</i> and <i>Policies</i>. Up to 4 columns with 15 links each. Links can be full URLs, site paths (<code>/about</code>) or <code>mailto:</code> addresses.</p>
+    ${cols.map((c, ci) => `<div class="fcolbox">
+      <div class="row"><label class="fld grow" style="margin:0"><span>Column ${ci + 1} heading</span><input data-fp="columns.${ci}.title" value="${esc(c.title)}" maxlength="60"></label>
+        <span class="mv" style="display:flex;align-self:flex-end;margin-bottom:6px"><button data-act="fMove" data-p="columns" data-i="${ci}" data-d="-1" title="Move left" ${ci ? "" : "disabled"}>◀</button><button data-act="fMove" data-p="columns" data-i="${ci}" data-d="1" title="Move right" ${ci < cols.length - 1 ? "" : "disabled"}>▶</button></span>
+        <button class="btn sm danger" style="align-self:flex-end" data-act="fDel" data-p="columns" data-i="${ci}" data-confirm="1">Delete column</button></div>
+      ${linkRows(`columns.${ci}.links`, 15)}</div>`).join("") || `<div class="empty small">No columns. Add one to show navigation links.</div>`}
+  </div>
+
+  <div class="panel"><h3>Subscribe box</h3><div class="grid2">
+    ${fSelect("subscribe.mode", "What the form does", F.SUBSCRIBE_MODES, "span2")}
+    ${sub.mode === "off" ? "" : `
+    ${fField("subscribe.title", "Heading", "text", "span2", 'maxlength="200"')}
+    ${fField("subscribe.placeholder", "Email field placeholder", "text", "", 'maxlength="60"')}
+    ${fField("subscribe.button", "Button text", "text", "", 'maxlength="40"')}
+    ${sub.mode === "link" ? `${fField("subscribe.url", "Newsletter URL — {email} is replaced with the visitor's address", "url", "span2", 'placeholder="https://yourname.substack.com/subscribe?email={email}"')}
+      ${!sub.url ? '<p class="small err span2">Add a URL; without one the box is hidden when you publish.</p>' : ""}` : `
+    ${fField("subscribe.success", "Message after subscribing", "text", "span2", 'maxlength="300"')}`}`}
+  </div></div>
+
+  <div class="panel"><h3>Bottom bar</h3><div class="grid2">
+    ${fField("copyright", "Copyright line — {year} becomes the current year", "text", "span2", 'maxlength="200"')}
+    ${fField("note", "Small note — write links as [text](https://…)", "area", "span2", 'maxlength="600" rows="2"')}
+  </div>
+    <h4 class="fsubhead">Bottom links</h4>${linkRows("bottomLinks", 10)}</div>
+
+  <div class="panel" id="subsPanel"><h3>Subscribers</h3><div id="subsBody" class="muted small">Loading…</div></div>
+
+  <div class="panel"><h3>Reset</h3><p class="muted">Restore the original footer design and links. You can undo this until you save.</p>
+    <button class="btn danger" data-act="fReset">Reset footer to defaults</button></div>`;
+  box.querySelectorAll("[data-fp]").forEach((inp) => {
+    const path = inp.dataset.fp;
+    const ev = inp.type === "checkbox" || inp.tagName === "SELECT" ? "change" : "input";
+    inp.addEventListener(ev, () => {
+      const v = inp.type === "checkbox" ? inp.checked : inp.value;
+      if (inp.dataset.link) inp.classList.toggle("invalid", linkBad(v));
+      commit("footer", () => setPath(ft(), path, v), { coalesce: "fp:" + path, rerender: false });
+      if (path === "subscribe.mode" || (path === "subscribe.url" && !!v !== !!S._lastSubUrl)) { S._lastSubUrl = v; renderFooterBody(); }
+      sendPreview();
+    });
+  });
+  S._lastSubUrl = sub.url;
+  renderSubscribers();
+}
+function fStructural(label, fn) {
+  commit(label, () => fn(ft()), { rerender: false });
+  renderFooterBody();
+  sendPreview();
+}
+ACT.fAdd = (b) => fStructural("footer: add link", (f) => {
+  const list = getPath(f, b.dataset.p) || (setPath(f, b.dataset.p, []), getPath(f, b.dataset.p));
+  list.push(b.dataset.kind === "social" ? { type: "link", label: "", url: "" } : { label: "New link", url: "" });
+});
+ACT.fDel = async (b) => {
+  const list = getPath(ft(), b.dataset.p), i = +b.dataset.i;
+  if (b.dataset.confirm && !(await confirmBox("Delete this column?", `“${list[i].title || "Untitled"}” and its ${list[i].links.length} links will be removed. You can undo until you save.`, "Delete"))) return;
+  fStructural("footer: remove", (f) => getPath(f, b.dataset.p).splice(i, 1));
+};
+ACT.fMove = (b) => fStructural("footer: reorder", (f) => {
+  const list = getPath(f, b.dataset.p), i = +b.dataset.i, j = i + +b.dataset.d;
+  if (j < 0 || j >= list.length) return;
+  [list[i], list[j]] = [list[j], list[i]];
+});
+ACT.fAddCol = () => fStructural("footer: add column", (f) => { f.columns = f.columns || []; f.columns.push({ title: "New column", links: [] }); });
+ACT.fReset = async () => {
+  if (!(await confirmBox("Reset the footer?", "All footer text, links and subscribe settings go back to the defaults. Subscribers are not affected.", "Reset"))) return;
+  fStructural("footer: reset", () => { S.draft.settings.footer = clone(F.DEFAULT_FOOTER); });
+};
+
+/* subscribers (stored on the server only; not in backups or GitHub) */
+async function loadSubscribers() {
+  try { S.subs = (await api("GET", "/api/admin/subscribers")).subscribers; }
+  catch (e) { S.subs = null; S.subsErr = e.message; }
+  renderSubscribers();
+}
+function renderSubscribers() {
+  const box = $("#subsBody");
+  if (!box) return;
+  if (!S.subs) { box.textContent = S.subsErr || "Loading…"; return; }
+  const q = (S.subsQ || "").toLowerCase();
+  const list = S.subs.slice().reverse().filter((x) => !q || x.email.includes(q));
+  box.className = "";
+  box.innerHTML = `<p class="muted small">Collected by the footer form when it is set to "Collect emails on this server". Stored only in the server's data volume — not included in backups or GitHub sync. Export them to your mailing tool.</p>
+    <div class="row" style="margin:8px 0"><b>${S.subs.length}</b><span class="muted small">subscriber${S.subs.length === 1 ? "" : "s"}</span><span class="spacer"></span>
+      <input id="subsQ" placeholder="Search…" value="${esc(S.subsQ || "")}" style="max-width:200px">
+      <button class="btn sm" data-act="subsCsv" ${S.subs.length ? "" : "disabled"}>${icon("i-dl")}Export CSV</button>
+      <button class="btn sm" data-act="subsReload">Refresh</button>
+      <button class="btn sm danger" data-act="subsDelAll" ${S.subs.length ? "" : "disabled"}>Delete all</button></div>
+    ${list.length ? `<div class="preview"><table class="items"><thead><tr><th>Email</th><th>Subscribed</th><th></th></tr></thead><tbody>
+      ${list.slice(0, 500).map((x) => `<tr><td class="mono">${esc(x.email)}</td><td class="small muted">${esc(fmtDate(x.at))}</td><td class="acts"><button class="btn xs danger" data-act="subsDel" data-e="${esc(x.email)}">Delete</button></td></tr>`).join("")}
+    </tbody></table></div>${list.length > 500 ? `<p class="small muted">Showing the newest 500 of ${list.length}. Export to see all.</p>` : ""}` : `<div class="empty small">${S.subs.length ? "No matches." : "No subscribers yet."}</div>`}`;
+  const qi = $("#subsQ");
+  qi.addEventListener("input", () => { S.subsQ = qi.value; const pos = qi.selectionStart; renderSubscribers(); const n = $("#subsQ"); n.focus(); n.setSelectionRange(pos, pos); });
+}
+ACT.subsReload = () => loadSubscribers();
+ACT.subsCsv = () => {
+  const csvCell = (v) => { let s = String(v); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  download(`subscribers-${stamp()}.csv`, "email,subscribed_at\n" + S.subs.map((x) => csvCell(x.email) + "," + csvCell(x.at)).join("\n") + "\n", "text/csv");
+};
+async function delSubs(body, msg) {
+  try { const r = await api("POST", "/api/admin/subscribers/delete", body); S.subs = r.subscribers; renderSubscribers(); toast(`Removed ${r.removed} subscriber${r.removed === 1 ? "" : "s"}`); }
+  catch (e) { toast(e.message, "bad"); }
+}
+ACT.subsDel = async (b) => { if (await confirmBox("Delete subscriber?", b.dataset.e + " will be removed permanently.", "Delete")) delSubs({ emails: [b.dataset.e] }); };
+ACT.subsDelAll = async () => { if (await confirmBox("Delete all subscribers?", `All ${S.subs.length} addresses will be removed permanently. Export them first if you need them.`, "Delete all")) delSubs({ all: true }); };
 
 /* =========================================================================
    security

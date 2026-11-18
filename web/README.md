@@ -38,7 +38,11 @@ A fast, searchable front-end for the curated list, plus an admin panel to manage
   - Pick the default theme, an optional theme for visitors whose device is in light mode, and which themes visitors can switch to from the palette button in the header.
   - Appearance options that apply on top of any theme: font, corners, card style, density, background effect (network nodes, falling code, cyber grid, starfield, none), glow, favicons, stats tiles, and custom accent colours.
   - A live desktop/mobile preview shows unsaved changes before you publish. Themes are defined in `site/assets/themes.mjs`.
-- **Site content**: titles, hero text, notice, footer and attribution, and groups.
+- **Site content**: titles, hero text, the notice, and groups.
+- **Footer**:
+  - A themed footer (card, flat or minimal style) that follows the active theme's colours, fonts and corners.
+  - Edit the brand name and about text, social icon links (website, LinkedIn, GitHub, X, Pinterest, YouTube, Instagram, Facebook, Telegram, Medium, email, RSS), up to 4 link columns, the copyright line (`{year}` is filled in), a note with `[text](url)` links, and the bottom links. Links can be reordered, and the live preview shows changes before you publish.
+  - Subscribe box: collect emails on the server (with a subscriber list, CSV export and delete), send visitors to a newsletter page (`{email}` is filled in), or hide it. Subscribers are stored only in the data volume (`subscribers.json`), not in backups or GitHub.
 - **Clock & time zone**: turn the clock on or off, set the default time zone, 12/24-hour, seconds, and whether visitors may pick their own zone.
 - **GitHub sync**:
   - Shows the repository status: in sync, website ahead, GitHub ahead, or conflict.

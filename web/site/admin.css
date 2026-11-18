@@ -200,3 +200,13 @@ table.items tr.subrow td{background:var(--bg2);font:600 11.5px var(--mono);color
   #undoBtn,#dirtyPill{display:none}
   table.items .hide-m{display:none}
 }
+
+/* footer editor */
+.flist .frow{gap:8px;padding:8px 10px;flex-wrap:wrap}
+.flist .frow select{width:auto;flex:none}
+.flist .frow input{flex:1 1 140px;min-width:0}
+.flist .frow input.grow{flex:2 1 220px}
+input.invalid{border-color:var(--bad)!important}
+.fcolbox{border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:12px;background:var(--bg2)}
+.fcolbox .flist{background:var(--panel)}
+.fsubhead{margin:14px 0 8px;font-size:13px}

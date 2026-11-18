@@ -36,6 +36,65 @@ const ICON_GUESS = [
   ["course", "cap"], ["training", "cap"], ["compliance", "scale"], ["grc", "scale"], ["privacy", "scale"],
 ];
 
+export const SOCIAL_TYPES = [
+  ["web", "Website"], ["linkedin", "LinkedIn"], ["github", "GitHub"], ["x", "X (Twitter)"], ["pinterest", "Pinterest"],
+  ["youtube", "YouTube"], ["instagram", "Instagram"], ["facebook", "Facebook"], ["telegram", "Telegram"],
+  ["medium", "Medium"], ["mail", "Email"], ["rss", "RSS"], ["link", "Other link"],
+];
+const SOCIAL_SET = new Set(SOCIAL_TYPES.map((t) => t[0]));
+export const SUBSCRIBE_MODES = [
+  ["local", "Collect emails on this server (see the subscriber list in the admin panel)"],
+  ["link", "Send visitors to a newsletter page (Substack, Mailchimp, Google Form...)"],
+  ["off", "Hide the subscribe box"],
+];
+
+const SITE = "https://sajinshivdas.online";
+export const DEFAULT_FOOTER = {
+  enabled: true,
+  style: "card",
+  brand: "Sajin Shivdas",
+  about: "Cybersecurity professional and technology enthusiast, dedicated to digital security and innovation.",
+  social: [
+    { type: "web", label: "Website", url: SITE + "/" },
+    { type: "linkedin", label: "LinkedIn", url: "https://www.linkedin.com/" },
+    { type: "github", label: "GitHub", url: "https://github.com/ShivdaSaj" },
+    { type: "x", label: "X", url: "https://x.com/" },
+    { type: "pinterest", label: "Pinterest", url: "https://www.pinterest.com/" },
+  ],
+  columns: [
+    { title: "Quick links", links: [
+      { label: "Home", url: SITE + "/" },
+      { label: "About", url: SITE + "/about" },
+      { label: "Contact", url: SITE + "/contact" },
+    ] },
+    { title: "Policies", links: [
+      { label: "Privacy Policy", url: SITE + "/privacy-policy" },
+      { label: "Terms & Conditions", url: SITE + "/terms-and-conditions" },
+      { label: "Disclaimer", url: SITE + "/disclaimer" },
+      { label: "Cookies Policy", url: SITE + "/cookies-policy" },
+    ] },
+  ],
+  subscribe: {
+    mode: "local",
+    title: "Subscribe to get updates on cybersecurity insights",
+    placeholder: "Your email",
+    button: "Subscribe",
+    url: "",
+    success: "Thanks for subscribing! You'll hear from us when there's something new.",
+  },
+  copyright: "© {year} Sajin Shivdas. All rights reserved.",
+  note: "Curated list originally published at [ShivdaSaj/Sajins-cybersecurity-tools](https://github.com/ShivdaSaj/Sajins-cybersecurity-tools)",
+  bottomLinks: [
+    { label: "Privacy Policy", url: SITE + "/privacy-policy" },
+    { label: "Terms & Conditions", url: SITE + "/terms-and-conditions" },
+    { label: "Disclaimer", url: SITE + "/disclaimer" },
+    { label: "Cookies Policy", url: SITE + "/cookies-policy" },
+  ],
+  showDownloads: true,
+  showLegend: true,
+  showUpdated: true,
+};
+
 export const DEFAULT_SETTINGS = {
   siteTitle: "Sajins Cybersecurity Tools",
   brandName: "Sajins Cyber Tools",
@@ -75,6 +134,7 @@ export const DEFAULT_SETTINGS = {
   clockHour12: false,
   clockSeconds: true,
   clockAllowVisitorChange: true,
+  footer: DEFAULT_FOOTER,
 };
 
 const SETTING_TYPES = Object.fromEntries(Object.entries(DEFAULT_SETTINGS).map(([k, v]) => [k, Array.isArray(v) ? "array" : typeof v]));
@@ -114,6 +174,16 @@ export function safeUrl(u) {
   } catch {
     return "";
   }
+}
+
+/** A link target allowed in the footer: http(s), mailto:, a site path ("/about") or an anchor ("#top"). */
+export function safeLink(u) {
+  if (typeof u !== "string") return "";
+  const s = u.trim();
+  if (!s) return "";
+  if (/^mailto:[^\s<>"]+@[^\s<>"]+$/i.test(s)) return s.slice(0, 500);
+  if (/^(\/(?!\/)|#)[^\s<>"]*$/.test(s)) return s.slice(0, 500);
+  return safeUrl(s);
 }
 
 export function hostOf(u) {
@@ -219,7 +289,62 @@ export function normalizeSettings(raw = {}) {
   s.themesEnabled = THEME_IDS.filter((id) => s.themesEnabled.includes(id) || id === s.theme || (s.themeAuto && id === s.themeLight));
   s.sourceUrl = safeUrl(s.sourceUrl);
   if (s.defaultTimezone && !isValidTimeZone(s.defaultTimezone)) s.defaultTimezone = "";
+  s.footer = normalizeFooter(raw.footer, raw);
   return s;
+}
+
+function normLinks(list, max) {
+  return (Array.isArray(list) ? list : [])
+    .map((l) => ({ label: str(l && l.label, 80), url: safeLink(l && l.url) }))
+    .filter((l) => l.label || l.url)
+    .slice(0, max);
+}
+
+/** Validate the footer settings; fills defaults for missing parts. `legacy` carries pre-footer settings for migration. */
+export function normalizeFooter(raw, legacy = {}) {
+  const d = DEFAULT_FOOTER;
+  const f = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : null;
+  if (!f) {
+    const out = structuredClone(d);
+    // keep an attribution line customised before the footer editor existed
+    if ("footerText" in legacy || "sourceUrl" in legacy) {
+      const url = safeUrl(legacy.sourceUrl);
+      const text = str(legacy.footerText, 300);
+      const label = str(legacy.sourceLabel, 120).replace(/[[\]]/g, "") || hostOf(url);
+      out.note = url ? `${text ? text + " " : ""}[${label}](${url})` : text;
+    }
+    return out;
+  }
+  const b = (k) => (k in f ? f[k] === true || f[k] === "true" : d[k]);
+  const t = (k, max = 300) => (typeof f[k] === "string" ? str(f[k], max) : d[k]);
+  const sub = f.subscribe && typeof f.subscribe === "object" ? f.subscribe : {};
+  const st = (k, max = 200) => (typeof sub[k] === "string" ? str(sub[k], max) : d.subscribe[k]);
+  const mode = SUBSCRIBE_MODES.some((m) => m[0] === sub.mode) ? sub.mode : d.subscribe.mode;
+  let surl = typeof sub.url === "string" ? sub.url.trim() : "";
+  surl = surl ? safeUrl(surl.replace(/\{email\}/g, "EMAIL_PLACEHOLDER")).replace(/EMAIL_PLACEHOLDER/g, "{email}") : "";
+  return {
+    enabled: b("enabled"),
+    style: ["card", "flat", "minimal"].includes(f.style) ? f.style : d.style,
+    brand: t("brand", 80),
+    about: t("about", 600),
+    social: (Array.isArray(f.social) ? f.social : d.social)
+      .map((x) => ({ type: SOCIAL_SET.has(x && x.type) ? x.type : "link", label: str(x && x.label, 60), url: safeLink(x && x.url) }))
+      .filter((x) => x.url)
+      .slice(0, 12),
+    columns: (Array.isArray(f.columns) ? f.columns : d.columns)
+      .map((c) => ({ title: str(c && c.title, 60), links: normLinks(c && c.links, 15) }))
+      .slice(0, 4),
+    subscribe: {
+      mode: mode === "link" && !surl ? "off" : mode,
+      title: st("title"), placeholder: st("placeholder", 60), button: st("button", 40), url: surl, success: st("success", 300),
+    },
+    copyright: t("copyright", 200),
+    note: t("note", 600),
+    bottomLinks: normLinks(Array.isArray(f.bottomLinks) ? f.bottomLinks : d.bottomLinks, 10),
+    showDownloads: b("showDownloads"),
+    showLegend: b("showLegend"),
+    showUpdated: b("showUpdated"),
+  };
 }
 
 export function isValidTimeZone(tz) {
