@@ -141,7 +141,7 @@ mark{background:var(--mark);color:inherit;border-radius:3px;padding:0 1px}
 .notice button{margin-left:auto;border:0;background:none;color:var(--muted);cursor:pointer;font-size:18px;line-height:1}
 
 /* footer */
-.sfoot{position:relative;z-index:1;padding:26px 0 34px;color:var(--muted);font-size:14px}
+.sfoot{container:sfoot/inline-size;position:relative;z-index:1;padding:26px 0 34px;color:var(--muted);font-size:14px}
 .sfoot[hidden]{display:none}
 .fpanel{position:relative;border-radius:calc(var(--r-lg) + 8px);border:1px solid var(--line);background:linear-gradient(135deg,color-mix(in srgb,var(--accent2) 7%,var(--panel)),var(--panel) 45%,color-mix(in srgb,var(--accent) 9%,var(--panel)));box-shadow:var(--shadow);padding:40px 40px 26px;overflow:hidden;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
 .fpanel::before{content:"";position:absolute;inset:0 0 auto;height:3px;background:linear-gradient(90deg,var(--accent2),var(--accent) 55%,var(--accent3,var(--accent)))}
@@ -194,12 +194,12 @@ mark{background:var(--mark);color:inherit;border-radius:3px;padding:0 1px}
 .sfoot[data-style="minimal"] .fpanel::before,.sfoot[data-style="minimal"] .fpanel::after{display:none}
 .sfoot[data-style="minimal"] .fname{font-size:19px}
 .sfoot[data-style="minimal"] .fsocial a{width:36px;height:36px}
-@media (max-width: 1080px){
+@container sfoot (max-width: 1080px){
   .fgrid,.fgrid.nocols{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
   .fgrid .fcols{grid-column:1/-1;grid-row:2}
   .fgrid.nosub .fcols{grid-column:auto;grid-row:auto}
 }
-@media (max-width: 700px){
+@container sfoot (max-width: 700px){
   .fpanel{padding:28px 20px 20px}
   .fgrid,.fgrid.nosub,.fgrid.nocols{grid-template-columns:minmax(0,1fr)}
   .fgrid .fcols,.fgrid.nosub .fcols{grid-column:auto;grid-row:auto}
