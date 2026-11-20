@@ -59,7 +59,7 @@ function applySettings() {
 
 /* ---------------- hero animation (radar / globe / waves / shield) ---------------- */
 var ORBIT = { mode: "", built: false, counted: false, chips: [] };
-var HERO_FX = ["radar", "globe", "waves", "shield"];
+var HERO_FX = ["radar", "globe", "waves", "shield", "map", "terminal", "topology", "constellation"];
 var ORBIT_ANGLES = [-90, -28, 30, 90, 150, 208]; // degrees, 0 = right, clockwise (screen coordinates)
 function setOrbit(mode) {
   var q = new URLSearchParams(location.search).get("hero");
@@ -139,6 +139,7 @@ var HV = (function () {
   function size() {
     var r = cv.getBoundingClientRect();
     dpr = Math.min(window.devicePixelRatio || 1, 2);
+    ORBIT.box = $("orbit").getBoundingClientRect().width;
     W = Math.max(1, Math.round(r.width)); H = Math.max(1, Math.round(r.height));
     cv.width = W * dpr; cv.height = H * dpr;
     x.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -305,7 +306,162 @@ var HV = (function () {
     c.closePath();
   }
 
-  var DRAW = { globe: globe, waves: waves, shield: shield };
+  /* --- threat map: dotted world map with simulated attack arcs between cities --- */
+  var LAND = [
+    [[-168,65],[-140,70],[-95,72],[-80,63],[-60,55],[-52,47],[-66,44],[-76,35],[-81,25],[-97,26],[-97,18],[-87,15],[-79,8],[-83,9],[-92,15],[-105,20],[-115,30],[-124,40],[-125,48],[-135,58],[-150,60],[-165,60]],
+    [[-55,60],[-42,60],[-20,70],[-20,80],[-60,82],[-70,76],[-55,68]],
+    [[-80,9],[-60,10],[-50,0],[-35,-6],[-40,-22],[-48,-28],[-58,-38],[-65,-55],[-72,-50],[-73,-40],[-71,-18],[-81,-5]],
+    [[-10,36],[-9,43],[-2,44],[-5,48],[3,51],[8,54],[5,58],[10,63],[18,70],[30,71],[40,67],[45,55],[40,45],[28,41],[20,40],[12,38],[3,42]],
+    [[-17,15],[-17,21],[-10,30],[-5,36],[10,37],[20,32],[32,31],[35,28],[43,12],[51,12],[40,-2],[40,-15],[33,-26],[20,-35],[17,-28],[12,-15],[13,-5],[9,4],[-8,4],[-15,10]],
+    [[28,41],[40,45],[45,55],[40,67],[60,70],[80,73],[110,77],[140,72],[170,70],[180,65],[160,58],[142,52],[135,43],[127,35],[122,30],[121,22],[110,20],[108,12],[104,1],[100,7],[98,16],[92,22],[88,22],[80,8],[77,8],[72,20],[67,25],[57,25],[56,26],[50,30],[48,29],[52,23],[59,22],[55,17],[44,12],[38,20],[35,28],[35,36]],
+    [[114,-22],[122,-18],[131,-12],[137,-12],[142,-11],[146,-19],[153,-26],[150,-37],[141,-38],[131,-31],[118,-35],[114,-30]],
+    [[130,31],[136,34],[141,38],[142,44],[140,41],[133,35]], [[-5,50],[1,51],[-1,55],[-3,58],[-6,56]],
+    [[95,5],[106,-6],[115,-8],[120,-9],[125,-8],[119,-3],[118,2],[109,2],[100,-1]], [[44,-25],[47,-25],[50,-15],[49,-12]], [[172,-34],[178,-38],[171,-46],[167,-46]]
+  ];
+  var CITIES = [[-122,37.7],[-74,40.7],[-79.4,43.7],[-46.6,-23.5],[-0.1,51.5],[8.7,50.1],[37.6,55.7],[55.3,25.2],[72.8,19],[103.8,1.3],[139.7,35.7],[151.2,-33.9],[3.4,6.5],[28,-26.2],[127,37.5],[-99,19.4]];
+  function inPoly(px, py, poly) {
+    var c = false;
+    for (var i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      var xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+      if ((yi > py) !== (yj > py) && px < (xj - xi) * (py - yi) / (yj - yi) + xi) c = !c;
+    }
+    return c;
+  }
+  function map(t) {
+    var mw = W * 0.96, mh = mw * 138 / 360, ox = (W - mw) / 2, oy = (H - mh) / 2;
+    var P = function (lon, lat) { return [ox + (lon + 180) / 360 * mw, oy + (80 - lat) / 138 * mh]; };
+    if (!G.dots) {
+      var dots = [], step = Math.max(5, W / 95);
+      for (var y = oy; y < oy + mh; y += step) for (var xx = ox; xx < ox + mw; xx += step) {
+        var lon = (xx - ox) / mw * 360 - 180, lat = 80 - (y - oy) / mh * 138;
+        for (var k = 0; k < LAND.length; k++) if (inPoly(lon, lat, LAND[k])) { dots.push([xx, y]); break; }
+      }
+      G.dots = dots; G.atk = []; G.next = 0; G.hits = [];
+    }
+    x.fillStyle = C.accent;
+    x.globalAlpha = C.light ? 0.28 : 0.3;
+    for (var d = 0; d < G.dots.length; d++) x.fillRect(G.dots[d][0] - 1, G.dots[d][1] - 1, 2, 2);
+    // spawn simulated attacks
+    if (t > G.next) {
+      var a = CITIES[Math.floor(Math.random() * CITIES.length)], b = a;
+      while (b === a) b = CITIES[Math.floor(Math.random() * CITIES.length)];
+      G.atk.push({ a: P(a[0], a[1]), b: P(b[0], b[1]), s: t, d: 1500 + Math.random() * 900, c: [C.accent, C.accent2, C.warn || C.accent3][G.atk.length % 3] });
+      G.next = t + (reduced ? 0 : 380);
+      if (reduced) { for (var r0 = 0; r0 < 6; r0++) G.atk.push({ a: P(CITIES[r0][0], CITIES[r0][1]), b: P(CITIES[r0 + 7][0], CITIES[r0 + 7][1]), s: t - 900, d: 1500, c: C.accent }); }
+    }
+    x.lineCap = "round";
+    G.atk = G.atk.filter(function (k2) {
+      var u = (t - k2.s) / k2.d;
+      if (u >= 1) { G.hits.push({ p: k2.b, s: t, c: k2.c }); return false; }
+      var mx = (k2.a[0] + k2.b[0]) / 2, my = (k2.a[1] + k2.b[1]) / 2 - Math.hypot(k2.b[0] - k2.a[0], k2.b[1] - k2.a[1]) * 0.35;
+      var q = function (v) { var w = 1 - v; return [w * w * k2.a[0] + 2 * w * v * mx + v * v * k2.b[0], w * w * k2.a[1] + 2 * w * v * my + v * v * k2.b[1]]; };
+      x.strokeStyle = k2.c; x.lineWidth = 1; x.globalAlpha = 0.18;
+      x.beginPath(); x.moveTo(k2.a[0], k2.a[1]); x.quadraticCurveTo(mx, my, k2.b[0], k2.b[1]); x.stroke();
+      x.lineWidth = 2.2; x.globalAlpha = 0.95; x.shadowColor = k2.c; x.shadowBlur = 10;
+      x.beginPath(); var st = Math.max(0, u - 0.22), p0 = q(st); x.moveTo(p0[0], p0[1]);
+      for (var v = st; v <= u; v += 0.02) { var pp = q(v); x.lineTo(pp[0], pp[1]); }
+      x.stroke();
+      var hd = q(u); x.fillStyle = "#fff"; x.beginPath(); x.arc(hd[0], hd[1], 2.4, 0, 7); x.fill();
+      x.shadowBlur = 0;
+      x.globalAlpha = 0.7; x.fillStyle = k2.c; x.beginPath(); x.arc(k2.a[0], k2.a[1], 2.5, 0, 7); x.fill();
+      return true;
+    });
+    G.hits = G.hits.filter(function (h) {
+      var u = (t - h.s) / 900; if (u >= 1) return false;
+      x.strokeStyle = h.c; x.lineWidth = 1.6; x.globalAlpha = 1 - u;
+      x.beginPath(); x.arc(h.p[0], h.p[1], 3 + u * 16, 0, 7); x.stroke();
+      return true;
+    });
+    // city markers
+    x.globalAlpha = 0.9; x.fillStyle = C.text;
+    CITIES.forEach(function (c) { var p = P(c[0], c[1]); x.beginPath(); x.arc(p[0], p[1], 1.6, 0, 7); x.fill(); });
+    x.globalAlpha = 0.75; x.fillStyle = C.muted; x.font = "600 " + Math.max(9, W / 60) + "px ui-monospace,Menlo,monospace"; x.textAlign = "center";
+    x.fillText("SIMULATED ATTACK TRAFFIC · ILLUSTRATIVE", W / 2, oy + mh + Math.max(18, H * 0.05));
+    x.globalAlpha = 1;
+    var XS = [0.2, 0.5, 0.8];
+    for (var c = 0; c < 6; c++) placeChip(c, XS[c % 3] * W, c < 3 ? oy - H * 0.09 - (c === 1 ? H * 0.04 : 0) : oy + mh + H * 0.13 + (c === 4 ? H * 0.04 : 0), 1, 1, 2);
+  }
+
+  /* --- network topology: core router, category hubs, devices; packets flow along the links --- */
+  function bx(p) { return (p + 6) / 112 * W; }
+  function topology(t) {
+    var cx = W / 2, cy = H / 2;
+    if (!G.nodes) {
+      var hubs = [], devs = [], links = [];
+      ORBIT_ANGLES.forEach(function (a, i) {
+        var r = a * Math.PI / 180;
+        hubs.push([bx(50 + 41 * Math.cos(r)), bx(50 + 41 * Math.sin(r))]);
+        [-17, 17].forEach(function (o, j) {
+          var r2 = (a + o) * Math.PI / 180, dv = [bx(50 + 26 * Math.cos(r2)), bx(50 + 26 * Math.sin(r2)), (i + j) % 3];
+          devs.push(dv);
+          links.push([[cx, cy], dv, 0]); links.push([dv, hubs[i], 1]);
+        });
+      });
+      for (var i2 = 0; i2 < hubs.length; i2++) links.push([hubs[i2], hubs[(i2 + 1) % hubs.length], 2]);
+      G.nodes = { hubs: hubs, devs: devs }; G.links = links;
+      G.pk = []; for (var k = 0; k < 16; k++) G.pk.push({ l: Math.floor(Math.random() * links.length), o: Math.random(), sp: 0.00035 + Math.random() * 0.0004, dir: Math.random() < 0.5 ? 1 : -1 });
+    }
+    // links
+    G.links.forEach(function (L) {
+      x.strokeStyle = L[2] === 2 ? C.accent2 : C.accent; x.globalAlpha = L[2] === 2 ? 0.22 : 0.3; x.lineWidth = L[2] === 0 ? 1.4 : 1;
+      if (L[2] === 2) x.setLineDash([3, 6]);
+      x.beginPath(); x.moveTo(L[0][0], L[0][1]); x.lineTo(L[1][0], L[1][1]); x.stroke(); x.setLineDash([]);
+    });
+    // packets
+    G.pk.forEach(function (p, i) {
+      var u = (p.o + t * p.sp) % 1; if (p.dir < 0) u = 1 - u;
+      var L = G.links[p.l], px = L[0][0] + (L[1][0] - L[0][0]) * u, py = L[0][1] + (L[1][1] - L[0][1]) * u;
+      x.globalAlpha = 0.95; x.fillStyle = i % 4 === 0 ? (C.warn || C.accent2) : C.accent; x.shadowColor = x.fillStyle; x.shadowBlur = 10;
+      x.beginPath(); x.arc(px, py, 2.6, 0, 7); x.fill(); x.shadowBlur = 0;
+      if ((p.o + t * p.sp) % 1 < 0.004) p.l = Math.floor(Math.random() * G.links.length);
+    });
+    // devices: server / firewall / laptop glyphs
+    var s = Math.max(14, W / 30);
+    G.nodes.devs.forEach(function (d, i) {
+      var glow = 0.5 + 0.5 * Math.sin(t * 0.003 + i);
+      x.globalAlpha = 1; x.fillStyle = C.light ? "#fff" : "#0b1220"; x.strokeStyle = C.accent; x.lineWidth = 1.3;
+      x.shadowColor = C.accent; x.shadowBlur = 6 + glow * 10;
+      x.beginPath(); x.roundRect ? x.roundRect(d[0] - s / 2, d[1] - s / 2, s, s, 4) : x.rect(d[0] - s / 2, d[1] - s / 2, s, s); x.fill(); x.stroke(); x.shadowBlur = 0;
+      x.globalAlpha = 0.9; x.beginPath();
+      if (d[2] === 0) { for (var r = -1; r <= 1; r++) { x.moveTo(d[0] - s * 0.28, d[1] + r * s * 0.2); x.lineTo(d[0] + s * 0.28, d[1] + r * s * 0.2); } }
+      else if (d[2] === 1) { x.moveTo(d[0], d[1] - s * 0.3); x.lineTo(d[0] + s * 0.25, d[1] - s * 0.18); x.lineTo(d[0] + s * 0.2, d[1] + s * 0.12); x.lineTo(d[0], d[1] + s * 0.3); x.lineTo(d[0] - s * 0.2, d[1] + s * 0.12); x.lineTo(d[0] - s * 0.25, d[1] - s * 0.18); x.closePath(); }
+      else { x.rect(d[0] - s * 0.28, d[1] - s * 0.22, s * 0.56, s * 0.34); x.moveTo(d[0] - s * 0.34, d[1] + s * 0.24); x.lineTo(d[0] + s * 0.34, d[1] + s * 0.24); }
+      x.stroke();
+    });
+    x.globalAlpha = 1;
+    G.nodes.hubs.forEach(function (h, i) { placeChip(i, h[0], h[1], 1, 1, 3); });
+  }
+
+  /* --- tool constellation: real tool icons on tilted orbits, linked when close --- */
+  function constellation(t) {
+    var cx = W / 2, cy = H / 2, stars = ORBIT.stars || [];
+    var pos = [];
+    stars.forEach(function (st, i) {
+      var ring = i % 3, R = [0.42, 0.32, 0.22][ring] * W, tilt = [0.5, 0.62, 0.75][ring], sp = [0.00006, -0.00009, 0.00013][ring];
+      var a = st.a + t * sp, px = cx + Math.cos(a) * R, py = cy + Math.sin(a) * R * tilt, z = Math.sin(a);
+      pos.push([px, py, z]);
+      var bxp = toBox(px, py), sc = 0.78 + (z + 1) * 0.16;
+      st.el.style.transform = "translate(" + (bxp[0] / 100 * ORBIT.box) + "px," + (bxp[1] / 100 * ORBIT.box) + "px) scale(" + sc.toFixed(3) + ")";
+      st.el.style.opacity = (0.45 + (z + 1) * 0.275).toFixed(2);
+      st.el.style.zIndex = z > 0 ? 3 : 1;
+    });
+    [0.42, 0.32, 0.22].forEach(function (r, i) {
+      x.globalAlpha = 0.18; x.strokeStyle = i === 1 ? C.accent2 : C.accent; x.lineWidth = 1; x.setLineDash([2, 6]);
+      x.beginPath(); x.ellipse(cx, cy, r * W, r * W * [0.5, 0.62, 0.75][i], 0, 0, 7); x.stroke(); x.setLineDash([]);
+    });
+    x.strokeStyle = C.accent; x.lineWidth = 1;
+    for (var i = 0; i < pos.length; i++) for (var j = i + 1; j < pos.length; j++) {
+      var dd = Math.hypot(pos[i][0] - pos[j][0], pos[i][1] - pos[j][1]);
+      if (dd < W * 0.2) { x.globalAlpha = (1 - dd / (W * 0.2)) * 0.45; x.beginPath(); x.moveTo(pos[i][0], pos[i][1]); x.lineTo(pos[j][0], pos[j][1]); x.stroke(); }
+    }
+    // twinkling background stars
+    if (!G.tw) { G.tw = []; for (var k = 0; k < 60; k++) G.tw.push([Math.random() * W, Math.random() * H, Math.random() * 6]); }
+    x.fillStyle = C.text;
+    G.tw.forEach(function (p) { x.globalAlpha = 0.15 + 0.35 * Math.abs(Math.sin(t * 0.001 + p[2])); x.fillRect(p[0], p[1], 1.5, 1.5); });
+    x.globalAlpha = 1;
+  }
+
+  var DRAW = { globe: globe, waves: waves, shield: shield, map: map, topology: topology, constellation: constellation };
   function frame(now) {
     raf = 0;
     if (!DRAW[mode]) return;
@@ -321,12 +477,140 @@ var HV = (function () {
     start: function (m) {
       if (!x) return;
       mode = m; G = {};
+      TERM.stop(); BLIPS.stop(); STARS.clear();
+      if (m === "terminal") TERM.start();
+      if (m === "radar") BLIPS.start();
+      if (m === "constellation") STARS.build();
       if (!DRAW[m]) { resetChips(); x.clearRect(0, 0, W, H); return; }
       readColors(); size(); kick();
     },
-    stop: function () { mode = ""; resetChips(); },
-    visible: function (v) { vis = v; if (v) kick(); },
+    stop: function () { mode = ""; resetChips(); TERM.stop(); BLIPS.stop(); STARS.clear(); },
+    visible: function (v) { vis = v; if (v) kick(); TERM.visible(v); BLIPS.visible(v); },
     recolor: function () { if (DRAW[mode]) { readColors(); G = {}; kick(); } },
+  };
+})();
+
+/* Radar blips: tool names that flash up where the sweep passes. */
+var BLIPS = (function () {
+  var timer = 0, on = false, vis = true, box = $("oBlips");
+  function tick() {
+    timer = 0;
+    if (!on) return;
+    if (vis && DB && DB.items.length && box.childNodes.length < 6) {
+      var sw = document.querySelector(".o-sweep"), an = sw && sw.getAnimations ? sw.getAnimations()[0] : null;
+      var deg = an && an.currentTime != null ? (an.currentTime % 9000) / 9000 * 360 : Math.random() * 360;
+      var a = (deg - 12 - 90) * Math.PI / 180, r = 22 + Math.random() * 18;
+      var it = DB.items[Math.floor(Math.random() * DB.items.length)];
+      var b = document.createElement("span"); b.className = "o-blip";
+      b.style.left = (50 + r * Math.cos(a)) + "%"; b.style.top = (50 + r * Math.sin(a)) + "%";
+      var i = document.createElement("i"), em = document.createElement("em"); em.textContent = it.name;
+      b.appendChild(i); b.appendChild(em); box.appendChild(b);
+      setTimeout(function () { b.remove(); }, 2900);
+    }
+    timer = setTimeout(tick, 1100);
+  }
+  return {
+    start: function () { if (matchMedia("(prefers-reduced-motion: reduce)").matches) return; on = true; if (!timer) timer = setTimeout(tick, 600); },
+    stop: function () { on = false; clearTimeout(timer); timer = 0; box.textContent = ""; },
+    visible: function (v) { vis = v; },
+  };
+})();
+
+/* Live terminal: types catalog queries and prints real results; result links filter the list. */
+var TERM = (function () {
+  var body = $("oTermBody"), timer = 0, on = false, vis = true, queue = [], qi = 0;
+  var reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function script() {
+    var cats = DB.cats.slice().sort(function (a, b) { return b.count - a.count; });
+    var free = DB.items.filter(function (i) { return i.free; }).length;
+    var lin = DB.items.filter(function (i) { return i.free && i.os.indexOf("Linux") >= 0; }).length;
+    var out = [{ cmd: "cst stats", out: [[DB.items.length + " entries · " + DB.cats.length + " categories · " + free + " free/OSS", "ok"]] }];
+    cats.slice(0, 10).forEach(function (c, i) {
+      var names = DB.items.filter(function (it) { return it.cat === c; }).slice(0, 3).map(function (it) { return it.name; });
+      out.push({ cmd: 'cst search --category "' + c.slug + '"', out: [["✓ " + c.count + " results", "ok"], [names.join(", ") + (c.count > 3 ? " …" : ""), "dim"], ["→ ", "p", c]] });
+      if (i === 2) out.push({ cmd: "cst search --free --os linux", out: [["✓ " + lin + " free tools run on Linux", "ok"]] });
+      if (i === 5) out.push({ cmd: "cst verify --links", out: [["✓ all entries reachable · TLS ok", "ok"], ["! use only on systems you are authorised to test", "wn"]] });
+    });
+    return out;
+  }
+  function line(cls) { var d = document.createElement("div"); if (cls) d.className = cls; body.appendChild(d); while (body.childNodes.length > 16) body.removeChild(body.firstChild); return d; }
+  function printOut(o) {
+    o.out.forEach(function (r) {
+      var d = line(r[1]);
+      if (r[2]) { d.appendChild(document.createTextNode(r[0])); var b = document.createElement("button"); b.type = "button"; b.dataset.c = r[2].slug; b.textContent = "open " + r[2].title; d.appendChild(b); }
+      else d.textContent = r[0];
+    });
+  }
+  function run() {
+    timer = 0;
+    if (!on) return;
+    if (!vis) { timer = setTimeout(run, 500); return; }
+    var o = queue[qi % queue.length]; qi++;
+    var d = line(), p = document.createElement("span"); p.className = "p"; p.textContent = "$ "; d.appendChild(p);
+    var tx = document.createTextNode(""), cur = document.createElement("span"); cur.className = "cur";
+    d.appendChild(tx); d.appendChild(cur);
+    var k = 0;
+    (function type() {
+      if (!on) return;
+      if (k < o.cmd.length) { tx.data += o.cmd[k++]; timer = setTimeout(type, 28 + Math.random() * 45); return; }
+      cur.remove();
+      timer = setTimeout(function () { printOut(o); timer = setTimeout(run, 1500); }, 260);
+    })();
+  }
+  body.addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-c]"); if (!b) return;
+    S.cat = b.dataset.c; S.kind = ""; render();
+    scrollTo({ top: results.getBoundingClientRect().top + scrollY - 210 });
+  });
+  return {
+    start: function () {
+      if (!DB) return;
+      on = true; queue = script(); qi = 0; body.textContent = "";
+      line("dim").textContent = "Sajins Cybersecurity Tools · catalog shell";
+      var pre = reduced ? 3 : 2;
+      queue.slice(0, pre).forEach(function (o) { var d = line(), p = document.createElement("span"); p.className = "p"; p.textContent = "$ "; d.appendChild(p); d.appendChild(document.createTextNode(o.cmd)); printOut(o); });
+      qi = pre;
+      if (reduced) return;
+      timer = setTimeout(run, 700);
+    },
+    stop: function () { on = false; clearTimeout(timer); timer = 0; },
+    visible: function (v) { vis = v; },
+  };
+})();
+
+/* Tool constellation: icon tiles for a spread of real tools; click searches for the tool. */
+var STARS = (function () {
+  var box = $("oStars");
+  box.addEventListener("click", function (e) {
+    var b = e.target.closest(".o-star"); if (!b) return;
+    qEl.value = b.dataset.q; S.q = b.dataset.q; render();
+    scrollTo({ top: results.getBoundingClientRect().top + scrollY - 210 });
+  });
+  box.addEventListener("error", function (e) {
+    var img = e.target; if (img.tagName !== "IMG") return;
+    var b = img.parentNode; img.remove(); b.insertBefore(document.createTextNode(b.dataset.q.charAt(0).toUpperCase()), b.firstChild);
+  }, true);
+  return {
+    build: function () {
+      box.textContent = ""; ORBIT.stars = [];
+      if (!DB) return;
+      var picks = [], seen = {};
+      for (var round = 0; picks.length < 18 && round < 6; round++) DB.cats.forEach(function (c) {
+        if (picks.length >= 18) return;
+        var it = DB.items.filter(function (i) { return i.cat === c && i.host && !seen[i.id]; })[round];
+        if (it) { seen[it.id] = 1; picks.push(it); }
+      });
+      picks.forEach(function (it, i) {
+        var b = document.createElement("button"); b.type = "button"; b.className = "o-star"; b.dataset.q = it.name;
+        b.setAttribute("aria-label", "Search for " + it.name);
+        if (SET.showFavicons !== false) { var img = document.createElement("img"); img.alt = ""; img.loading = "lazy"; img.referrerPolicy = "no-referrer"; img.src = "https://icons.duckduckgo.com/ip3/" + it.host + ".ico"; b.appendChild(img); }
+        else b.appendChild(document.createTextNode(it.name.charAt(0).toUpperCase()));
+        var sp = document.createElement("span"); sp.textContent = it.name; b.appendChild(sp);
+        box.appendChild(b);
+        ORBIT.stars.push({ el: b, a: Math.floor(i / 3) / Math.ceil(picks.length / 3) * Math.PI * 2 + (i % 3) * 0.55 });
+      });
+    },
+    clear: function () { box.textContent = ""; ORBIT.stars = []; },
   };
 })();
 

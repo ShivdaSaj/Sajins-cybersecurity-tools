@@ -356,6 +356,40 @@ body{transition:background-color .3s,color .3s}
   .o-chip small{display:none}
   .o-core span{font-size:9px;letter-spacing:1.6px}
 }
+
+/* extra hero styles */
+.o-blips,.o-stars{position:absolute;inset:0;pointer-events:none}
+.orbit:not([data-fx="radar"]) .o-blips{display:none}
+.o-blip{position:absolute;transform:translate(-50%,-50%);display:flex;align-items:center;gap:6px;opacity:0;animation:o-blip 2.8s ease-out forwards}
+.o-blip i{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 0 var(--accent);animation:o-blipdot 2.8s ease-out forwards}
+.o-blip em{font:600 10.5px/1 var(--mono);font-style:normal;color:var(--accent);white-space:nowrap;text-shadow:0 0 8px color-mix(in srgb,var(--accent) 60%,transparent);max-width:110px;overflow:hidden;text-overflow:ellipsis}
+@keyframes o-blip{0%{opacity:0}8%{opacity:1}70%{opacity:.85}100%{opacity:0}}
+@keyframes o-blipdot{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 70%,transparent)}40%{box-shadow:0 0 0 12px transparent}100%{box-shadow:0 0 0 0 transparent}}
+.o-stars{display:none;pointer-events:auto}
+.orbit[data-fx="constellation"] .o-stars{display:block;pointer-events:none}
+.o-star{position:absolute;left:0;top:0;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:12px;border:1px solid var(--line2);background:var(--panel-solid);display:grid;place-items:center;cursor:pointer;padding:0;pointer-events:auto;box-shadow:0 8px 22px -12px rgba(0,0,0,.6);will-change:transform;color:var(--text);font:700 15px var(--mono)}
+.o-star img{width:24px;height:24px;border-radius:5px}
+.o-star span{position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%);white-space:nowrap;font:600 11.5px var(--sans);padding:3px 8px;border-radius:6px;background:var(--panel-solid);border:1px solid var(--line2);opacity:0;pointer-events:none;transition:opacity .15s}
+.o-star:hover,.o-star:focus-visible{border-color:var(--accent);z-index:9!important}
+.o-star:hover span,.o-star:focus-visible span{opacity:1}
+.o-term{display:none;position:absolute;inset:7% 2%;z-index:3;border-radius:var(--r-lg);border:1px solid var(--line2);background:color-mix(in srgb,var(--panel-solid) 92%,#000);box-shadow:0 30px 70px -30px rgba(0,0,0,.8),0 0 0 1px color-mix(in srgb,var(--accent) 12%,transparent),0 0 60px -20px var(--accent);overflow:hidden;flex-direction:column;text-align:left}
+.orbit[data-fx="terminal"] .o-term{display:flex}
+.ot-bar{display:flex;align-items:center;gap:7px;padding:11px 14px;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--panel-solid) 80%,transparent)}
+.ot-bar i{width:11px;height:11px;border-radius:50%;background:#ff5f57}.ot-bar i:nth-child(2){background:#febc2e}.ot-bar i:nth-child(3){background:#28c840}
+.ot-bar span{margin-left:8px;font:600 12px var(--mono);color:var(--dim)}
+.ot-body{flex:1;padding:14px 16px;font:13px/1.65 var(--mono);color:var(--text);overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end}
+.ot-body div{white-space:pre-wrap;word-break:break-word}
+.ot-body .p{color:var(--accent)}.ot-body .ok{color:var(--good)}.ot-body .dim{color:var(--muted)}.ot-body .wn{color:var(--warn)}
+.ot-body button{font:inherit;color:var(--accent2);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.ot-body .cur{display:inline-block;width:8px;height:15px;margin-left:2px;vertical-align:-2px;background:var(--accent);animation:o-caret 1s steps(1) infinite}
+@keyframes o-caret{50%{opacity:0}}
+.orbit:is([data-fx="map"],[data-fx="terminal"]) :is(.o-core,.o-ripple){display:none}
+.orbit:is([data-fx="terminal"],[data-fx="constellation"]) .o-chips{display:none}
+.orbit:is([data-fx="map"],[data-fx="topology"]) .o-chip>span{animation:none}
+.orbit[data-fx="topology"] .o-core{inset:39%}
+.orbit[data-fx="topology"] .o-ripple{inset:39%}
+.orbit[data-fx="constellation"] .o-core{inset:38%}
+@media (max-width:600px){.ot-body{font-size:11px;padding:10px 12px}.o-star{width:36px;height:36px;margin:-18px 0 0 -18px}.o-star img{width:20px;height:20px}.o-blip em{font-size:9.5px}}
 </style>
 <style id="accentStyle">/*ACCENT*/</style>
 <script id="boot" type="application/json"><!--BOOT--></script>
@@ -431,6 +465,9 @@ body{transition:background-color .3s,color .3s}
         <svg class="o-pulse" viewBox="0 0 60 16" aria-hidden="true"><path class="base" d="M0 8h17l3-6 4 12 4-9 2 3h30"/><path d="M0 8h17l3-6 4 12 4-9 2 3h30"/></svg>
         <span id="oLabel">entries indexed</span>
       </div>
+      <div class="o-blips" id="oBlips" aria-hidden="true"></div>
+      <div class="o-stars" id="oStars"></div>
+      <div class="o-term" id="oTerm"><div class="ot-bar" aria-hidden="true"><i></i><i></i><i></i><span>cst@sajinshivdas:~/catalog</span></div><div class="ot-body" id="oTermBody" aria-live="off"></div></div>
       <div class="o-chips" id="oChips"></div>
     </div>
     <div class="notice" id="legal" hidden>
