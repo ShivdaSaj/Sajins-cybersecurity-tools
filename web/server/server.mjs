@@ -13,7 +13,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  normalizeCatalog, catalogFromReadme, toMarkdown, toYAML, toPortable, DEFAULT_SETTINGS,
+  normalizeCatalog, normalizeItem, normalizeCategory, catalogFromReadme, toMarkdown, toYAML, toPortable, DEFAULT_SETTINGS,
 } from "../site/assets/catalog-format.mjs";
 import { THEMES, themeById, themesCSS } from "../site/assets/themes.mjs";
 import { createGitHubSync } from "./github-sync.mjs";
@@ -235,6 +235,55 @@ function withSubs(fn) {
   });
   subsQueue = run.catch(() => {});
   return run;
+}
+
+/* ---------------- tool suggestions from visitors (review queue) ---------------- */
+const SUBM_FILE = () => path.join(DATA_DIR, "submissions.json");
+const SUBM_MAX_PENDING = 500, SUBM_KEEP = 2000;
+const submHits = new Map();
+let submQueue = Promise.resolve();
+function submLimited(ip) {
+  const now = Date.now(), a = submHits.get(ip);
+  if (!a || a.reset < now) { submHits.set(ip, { count: 1, reset: now + 3600e3 }); return false; }
+  if (submHits.size > 5000) for (const [k, v] of submHits) if (v.reset < now) submHits.delete(k);
+  return ++a.count > 5;
+}
+async function readSubmissions() {
+  const d = await readJSON(SUBM_FILE(), null);
+  return Array.isArray(d && d.submissions) ? d.submissions : [];
+}
+function withSubmissions(fn) {
+  const run = submQueue.then(async () => {
+    const list = await readSubmissions();
+    const out = await fn(list);
+    if (list.length > SUBM_KEEP) { // drop the oldest reviewed records first
+      const drop = list.filter((x) => x.status !== "pending").slice(0, list.length - SUBM_KEEP);
+      for (const d of drop) list.splice(list.indexOf(d), 1);
+    }
+    await writeJSONAtomic(SUBM_FILE(), { submissions: list });
+    return out;
+  });
+  submQueue = run.catch(() => {});
+  return run;
+}
+const sclean = (v, max) => String(v == null ? "" : v).replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
+/** Validate the editable part of a suggestion (shared by the public form and the admin editor). */
+function cleanSuggestion(b) {
+  const item = normalizeItem({
+    name: sclean(b.name, 120), url: b.url, desc: sclean(b.desc, 1000), lic: b.lic, sub: sclean(b.sub, 80),
+    os: Array.isArray(b.os) ? b.os : [], links: (Array.isArray(b.links) ? b.links : String(b.links || "").split(/\s+/)).slice(0, 5),
+  });
+  delete item.id;
+  const catId = catalog.categories.some((c) => c.id === b.catId) ? b.catId : "";
+  const newCategory = catId ? "" : sclean(b.newCategory, 80);
+  return { item, catId, newCategory };
+}
+function findDuplicate(url) {
+  const key = (u) => String(u || "").toLowerCase().replace(/^https?:\/\/(www\.)?/, "").replace(/[/#?]+$/, "");
+  const k = key(url);
+  if (!k) return null;
+  for (const c of catalog.categories) for (const it of c.items) if (key(it.url) === k) return { name: it.name, category: c.title };
+  return null;
 }
 
 function parseCookies(req) {
@@ -533,6 +582,33 @@ async function handleApi(req, res, url) {
     return json(res, 200, { ok: true });
   }
 
+  if (p === "/api/suggest" && m === "POST") {
+    if (catalog.settings.submissionsEnabled === false) return json(res, 404, { error: "Suggestions are closed." });
+    const body = await readBody(req, 16384);
+    if (body.company) return json(res, 200, { ok: true }); // honeypot: a bot
+    const sug = cleanSuggestion(body);
+    if (!sug.item.name || !String(body.name || "").trim()) return json(res, 400, { error: "Please enter the tool's name." });
+    if (!sug.item.url) return json(res, 400, { error: "Please enter the tool's website (starting with https://)." });
+    if (!sug.catId && !sug.newCategory) return json(res, 400, { error: "Please choose a category or suggest a new one." });
+    const email = sclean(body.email, 200).toLowerCase();
+    if (email && !EMAIL_RE.test(email)) return json(res, 400, { error: "That email address doesn't look right (it's optional)." });
+    const dup = findDuplicate(sug.item.url);
+    if (dup) return json(res, 409, { error: `Already listed as “${dup.name}” in ${dup.category}.` });
+    if (submLimited(clientIp(req))) return json(res, 429, { error: "Too many suggestions. Please try again later." });
+    const r = await withSubmissions((list) => {
+      const pending = list.filter((x) => x.status === "pending");
+      if (pending.some((x) => x.item.url === sug.item.url)) return "dup";
+      if (pending.length >= SUBM_MAX_PENDING) return "full";
+      const now = new Date().toISOString();
+      list.push({ id: crypto.randomBytes(8).toString("hex"), status: "pending", createdAt: now, updatedAt: now, ...sug,
+        submitter: { name: sclean(body.submitter, 80), email }, note: sclean(body.note, 500) });
+      return "added";
+    });
+    if (r === "full") return json(res, 503, { error: "The review queue is full right now. Please try again later." });
+    if (r === "added") log("new tool suggestion");
+    return json(res, 200, { ok: true });
+  }
+
   if (!p.startsWith("/api/admin/") && p !== "/api/auth/password") return json(res, 404, { error: "Not found" });
   if (!isAdmin(req)) return json(res, 401, { error: "Not signed in" });
 
@@ -610,6 +686,48 @@ async function handleApi(req, res, url) {
     const st = await sync.check();
     if (st.state.remoteState === "in-sync" && st.state.lastPullAt && Date.now() - Date.parse(st.state.lastPullAt) < 5000) return json(res, 200, { ...st, applied: true, catalog });
     return json(res, 200, st);
+  }
+
+  if (p === "/api/admin/submissions" && m === "GET") return json(res, 200, { submissions: await readSubmissions() });
+  const sm = /^\/api\/admin\/submissions\/([a-f0-9]{16})\/(update|reject|reopen|publish|delete)$/.exec(p);
+  if (sm && m === "POST") {
+    const [, id, action] = sm;
+    const body = await readBody(req, 65536);
+    const now = new Date().toISOString();
+    if (action === "publish") {
+      if (body.rev !== catalog.rev) return json(res, 409, { error: "The catalog changed since you loaded it. Reload, then publish again." });
+      const list = await readSubmissions();
+      const sub = list.find((x) => x.id === id);
+      if (!sub) return json(res, 404, { error: "Suggestion not found" });
+      if (sub.status === "published") return json(res, 409, { error: "Already published" });
+      const sug = body.item ? cleanSuggestion({ ...body.item, catId: body.catId, newCategory: body.newCategory }) : { item: sub.item, catId: sub.catId, newCategory: sub.newCategory };
+      if (!sug.item.url || !sug.item.name) return json(res, 400, { error: "Name and URL are required" });
+      const next = structuredClone(catalog);
+      let cat = next.categories.find((c) => c.id === sug.catId);
+      if (!cat && sug.newCategory) cat = next.categories.find((c) => c.title.toLowerCase() === sug.newCategory.toLowerCase());
+      if (!cat) { cat = normalizeCategory({ title: sug.newCategory || "Community suggestions" }, next.groups); next.categories.push(cat); }
+      cat.items.push(normalizeItem(sug.item));
+      const note = `publish suggestion “${sug.item.name.slice(0, 60)}”`;
+      const saved = await saveCatalog(normalizeCatalog(next), { backupLabel: "Auto: before " + note });
+      log(`catalog saved rev ${saved.rev} (${note})`);
+      await withSubmissions((l) => { const x = l.find((y) => y.id === id); if (x) Object.assign(x, sug, { status: "published", updatedAt: now, reviewedAt: now, publishedRev: saved.rev, publishedCat: cat.title }); });
+      const syncResult = await syncAfterSave(`Catalog revision ${saved.rev}: ${note}`);
+      return json(res, 200, { catalog: saved, sync: syncResult, submissions: await readSubmissions() });
+    }
+    const r = await withSubmissions((list) => {
+      const i = list.findIndex((x) => x.id === id);
+      if (i < 0) return "missing";
+      const x = list[i];
+      if (action === "delete") { list.splice(i, 1); return "ok"; }
+      if (action === "update") { if (x.status === "published") return "published"; Object.assign(x, cleanSuggestion(body), { updatedAt: now }); return "ok"; }
+      if (action === "reject") { if (x.status === "published") return "published"; Object.assign(x, { status: "rejected", reason: sclean(body.reason, 300), updatedAt: now, reviewedAt: now }); return "ok"; }
+      if (action === "reopen") { if (x.status !== "rejected") return "bad"; Object.assign(x, { status: "pending", reason: "", updatedAt: now }); return "ok"; }
+      return "bad";
+    });
+    if (r === "missing") return json(res, 404, { error: "Suggestion not found" });
+    if (r === "published") return json(res, 409, { error: "Already published; edit it in the catalog instead" });
+    if (r === "bad") return json(res, 400, { error: "Not allowed for this suggestion" });
+    return json(res, 200, { submissions: await readSubmissions() });
   }
 
   if (p === "/api/admin/subscribers" && m === "GET") return json(res, 200, { subscribers: await readSubs() });

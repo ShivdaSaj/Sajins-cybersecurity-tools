@@ -65,7 +65,7 @@ const S = {
   importTab: "import", ingestTab: "scan", clockTimer: null,
 };
 const views = {
-  dashboard: ["Dashboard", renderDashboard], catalog: ["Catalog editor", renderCatalog], import: ["Import / Export", renderImport],
+  dashboard: ["Dashboard", renderDashboard], catalog: ["Catalog editor", renderCatalog], suggestions: ["Suggestions", renderSuggestions], import: ["Import / Export", renderImport],
   ingest: ["Ingest & snippets", renderIngest], backups: ["Backup & restore", renderBackups], appearance: ["Site content", renderAppearance], themes: ["Themes & appearance", renderThemes],
   footer: ["Footer", renderFooter], clock: ["Clock & time zone", renderClock], github: ["GitHub sync", renderGitHub], security: ["Security", renderSecurity],
 };
@@ -182,6 +182,7 @@ async function loadApp() {
   $("#app").hidden = false;
   const v = location.hash.slice(1);
   go(views[v] ? v : "dashboard");
+  loadSuggestions(true);
 }
 async function boot() {
   try {
@@ -253,6 +254,7 @@ function renderDashboard(el) {
     <div class="kpi"><b>${d.groups.length}</b><span>Groups</span></div>
     <div class="kpi"><b>${free}</b><span>Free / OSS</span></div>
     <div class="kpi"><b>r${S.saved.rev}</b><span>Published revision</span></div>
+    <div class="kpi" style="cursor:pointer" data-act="goto" data-v="suggestions"><b>${S.subs ? S.subs.filter((x) => x.status === "pending").length : "–"}</b><span>Suggestions to review</span></div>
   </div>
   <div class="cols">
     <div class="panel"><h3>Quick actions</h3><p class="muted">Last published ${esc(fmtDate(S.saved.updatedAt))}${dirty() ? " · <b style='color:var(--warn)'>unsaved changes pending</b>" : ""}</p>
@@ -1599,6 +1601,171 @@ async function delSubs(body, msg) {
 }
 ACT.subsDel = async (b) => { if (await confirmBox("Delete subscriber?", b.dataset.e + " will be removed permanently.", "Delete")) delSubs({ emails: [b.dataset.e] }); };
 ACT.subsDelAll = async () => { if (await confirmBox("Delete all subscribers?", `All ${S.subs.length} addresses will be removed permanently. Export them first if you need them.`, "Delete all")) delSubs({ all: true }); };
+
+/* =========================================================================
+   suggestions from visitors: review, edit, reject or publish
+   ========================================================================= */
+const LIC_LABEL = { F: "FREE", C: "PAID", "F/C": "FREE + PAID" };
+async function loadSuggestions(quiet) {
+  try { S.subs = (await api("GET", "/api/admin/submissions")).submissions; S.subsErr = ""; }
+  catch (e) { S.subsErr = e.message; if (!quiet) toast(e.message, "bad"); }
+  updateSugBadge();
+  if (S.view === "suggestions") render();
+  if (S.view === "dashboard" && !quiet) render();
+}
+function updateSugBadge() {
+  const n = (S.subs || []).filter((x) => x.status === "pending").length;
+  $("#sugBadge").hidden = !n;
+  $("#sugBadge").textContent = n > 99 ? "99+" : n;
+}
+const sugDup = (x) => {
+  const k = keyUrl(x.item.url);
+  for (const c of S.saved.categories) for (const it of c.items) if (keyUrl(it.url) === k) return `${it.name} (${c.title})`;
+  return "";
+};
+function renderSuggestions(el) {
+  const st = S.sugTab || "pending";
+  const cnt = (k) => (S.subs || []).filter((x) => x.status === k).length;
+  el.innerHTML = `
+  <div class="panel"><div class="row"><div class="grow"><h3>Visitor suggestions</h3>
+    <p class="muted">Visitors suggest tools with the <b>Suggest a tool</b> button next to the search bar. Nothing appears on the site until you publish it.
+    <b>Publish</b> adds the entry to its category, saves a new revision (with a backup first) and syncs to GitHub.</p></div></div>
+    <div class="row" style="gap:16px">${setField("submissionsEnabled", "Accept suggestions from visitors (shows the button on the site)", "check")}
+      <span class="small muted">This setting goes live with <b>Save &amp; publish</b>. Suggester emails stay on the server only.</span></div>
+  </div>
+  <div class="row" style="margin-bottom:12px">
+    <div class="tabs" style="margin:0">
+      ${[["pending", "Pending"], ["published", "Published"], ["rejected", "Rejected"]].map(([k, l]) => `<button data-act="sugTab" data-t="${k}" aria-selected="${st === k}">${l} (${cnt(k)})</button>`).join("")}
+    </div><span class="spacer"></span><button class="btn sm" data-act="sugReload">Refresh</button></div>
+  <div id="sugList"></div>`;
+  bindSettings(el);
+  if (!S.subs && !S.subsLoading) { S.subsLoading = true; loadSuggestions().finally(() => { S.subsLoading = false; }); } else renderSugList();
+}
+function catName(x) {
+  const c = S.saved.categories.find((c) => c.id === x.catId);
+  return c ? c.title : x.newCategory ? `New: ${x.newCategory}` : "—";
+}
+function renderSugList() {
+  const box = $("#sugList");
+  if (!box) return;
+  if (!S.subs) { box.innerHTML = `<p class="muted">${esc(S.subsErr || "Loading…")}</p>`; return; }
+  const st = S.sugTab || "pending";
+  const list = S.subs.filter((x) => x.status === st).sort((a, b) => (st === "pending" ? a.createdAt.localeCompare(b.createdAt) : b.updatedAt.localeCompare(a.updatedAt)));
+  if (!list.length) { box.innerHTML = `<div class="empty">${st === "pending" ? "No suggestions waiting for review." : "Nothing here yet."}</div>`; return; }
+  box.innerHTML = list.map((x) => {
+    const it = x.item, dup = st === "pending" ? sugDup(x) : "";
+    return `<div class="sug${dup ? " dup" : ""}" data-id="${esc(x.id)}">
+      <div class="sug-hd"><div class="grow"><h4>${esc(it.name)}</h4>${it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noopener noreferrer">${esc(it.url)}</a>` : ""}</div>
+        <span class="small muted">${esc(fmtDate(x.createdAt))}</span></div>
+      <div class="sug-meta"><span class="badge ${x.newCategory && !x.catId ? "manual" : ""}">${esc(catName(x))}</span>
+        ${it.sub ? `<span class="badge">${esc(it.sub)}</span>` : ""}${it.lic ? `<span class="tag ${/F/.test(it.lic) ? "free" : "paid"}">${LIC_LABEL[it.lic] || esc(it.lic)}</span>` : ""}
+        ${(it.os || []).map((o) => `<span class="badge">${esc(o)}</span>`).join("")}</div>
+      ${it.desc ? `<div class="sug-desc">${esc(it.desc)}</div>` : '<div class="sug-desc"><i>No description</i></div>'}
+      ${(it.links || []).length ? `<div class="small">${it.links.map((l) => `<a href="${esc(l)}" target="_blank" rel="noopener noreferrer">${esc(l)}</a>`).join(" · ")}</div>` : ""}
+      ${x.submitter && (x.submitter.name || x.submitter.email) ? `<div class="sug-who">Suggested by ${esc(x.submitter.name || "anonymous")}${x.submitter.email ? ` · <a href="mailto:${esc(x.submitter.email)}">${esc(x.submitter.email)}</a>` : ""}</div>` : ""}
+      ${x.note ? `<div class="sug-note">${esc(x.note)}</div>` : ""}
+      ${dup ? `<div class="sug-warn">⚠ This URL is already in the catalog: ${esc(dup)}</div>` : ""}
+      ${st === "rejected" && x.reason ? `<div class="sug-warn">Rejected: ${esc(x.reason)}</div>` : ""}
+      ${st === "published" ? `<div class="small muted" style="margin-top:6px">Published in revision ${x.publishedRev} to ${esc(x.publishedCat || catName(x))} on ${esc(fmtDate(x.reviewedAt))}</div>` : ""}
+      <div class="sug-acts">
+        ${st === "pending" ? `<button class="btn sm primary" data-act="sugPublish" data-id="${x.id}">Publish</button>
+          <button class="btn sm" data-act="sugEdit" data-id="${x.id}">Review &amp; edit</button>
+          <button class="btn sm danger" data-act="sugReject" data-id="${x.id}">Reject</button>` : ""}
+        ${st === "rejected" ? `<button class="btn sm" data-act="sugReopen" data-id="${x.id}">Move back to pending</button>` : ""}
+        ${st === "published" ? `<button class="btn sm" data-act="sugView" data-id="${x.id}">Open category</button>` : ""}
+        ${st !== "pending" ? `<button class="btn sm danger" data-act="sugDelete" data-id="${x.id}">Delete record</button>` : ""}
+      </div>
+      ${S.sugEditing === x.id ? sugEditForm(x) : ""}
+    </div>`;
+  }).join("");
+  const fm = $("#sugForm");
+  if (fm) {
+    fm.catId.addEventListener("change", () => { $("#sugNewCat").hidden = fm.catId.value !== "__new"; });
+    fm.addEventListener("submit", (e) => { e.preventDefault(); sugSaveEdit(fm); });
+  }
+}
+function sugEditForm(x) {
+  const it = x.item;
+  const opts = S.saved.categories.map((c) => `<option value="${esc(c.id)}"${c.id === x.catId ? " selected" : ""}>${esc(c.title)}</option>`).join("");
+  return `<form class="sug-edit" id="sugForm"><div class="grid2">
+    <label class="fld"><span>Name *</span><input name="name" value="${esc(it.name)}" maxlength="120" required></label>
+    <label class="fld"><span>Category</span><select name="catId">${opts}<option value="__new"${!x.catId ? " selected" : ""}>+ New category…</option></select></label>
+    <label class="fld span2" id="sugNewCat"${x.catId ? " hidden" : ""}><span>New category name</span><input name="newCategory" value="${esc(x.newCategory || "")}" maxlength="80"></label>
+    <label class="fld span2"><span>URL *</span><input name="url" type="url" value="${esc(it.url)}" required></label>
+    <label class="fld span2"><span>Description</span><textarea name="desc" rows="3" maxlength="1000">${esc(it.desc)}</textarea></label>
+    <label class="fld"><span>Licence</span><select name="lic">${[["", "Not specified"], ["F", "Free / open source"], ["C", "Commercial"], ["F/C", "Free with paid tier"]].map(([v, l]) => `<option value="${v}"${(it.lic || "") === v ? " selected" : ""}>${l}</option>`).join("")}</select></label>
+    <label class="fld"><span>Section (sub-heading)</span><input name="sub" value="${esc(it.sub || "")}" maxlength="80"></label>
+    <fieldset class="fld span2"><legend>Platforms</legend>${["Linux", "macOS", "Windows"].map((o) => `<label class="chk"><input type="checkbox" name="os" value="${o}"${(it.os || []).includes(o) ? " checked" : ""}> ${o}</label>`).join(" ")}</fieldset>
+    <label class="fld span2"><span>Extra links (one per line)</span><textarea name="links" rows="2">${esc((it.links || []).join("\n"))}</textarea></label>
+  </div><p class="err" id="sugErr"></p>
+  <div class="row"><button class="btn primary" value="save">Save changes</button><button class="btn" type="button" data-act="sugEditClose">Close</button></div></form>`;
+}
+function sugFormData(fm) {
+  return {
+    name: fm.name.value, url: fm.url.value.trim(), desc: fm.desc.value, lic: fm.lic.value, sub: fm.sub.value,
+    os: $$('input[name="os"]:checked', fm).map((i) => i.value), links: fm.links.value.split(/\s+/).filter(Boolean),
+    catId: fm.catId.value === "__new" ? "" : fm.catId.value, newCategory: fm.catId.value === "__new" ? fm.newCategory.value : "",
+  };
+}
+async function sugSaveEdit(fm) {
+  const d = sugFormData(fm);
+  if (!d.name.trim() || !F.safeUrl(d.url)) { $("#sugErr").textContent = "Name and a valid http(s) URL are required"; return null; }
+  if (!d.catId && !d.newCategory.trim()) { $("#sugErr").textContent = "Choose a category or name a new one"; return null; }
+  try {
+    const r = await api("POST", `/api/admin/submissions/${S.sugEditing}/update`, d);
+    S.subs = r.submissions; S.sugEditing = null; renderSugList(); toast("Suggestion updated");
+    return true;
+  } catch (e) { $("#sugErr").textContent = e.message; return null; }
+}
+const sugById = (id) => S.subs.find((x) => x.id === id);
+ACT.sugTab = (b) => { S.sugTab = b.dataset.t; S.sugEditing = null; render(); };
+ACT.sugReload = () => loadSuggestions();
+ACT.sugEdit = (b) => { S.sugEditing = S.sugEditing === b.dataset.id ? null : b.dataset.id; renderSugList(); };
+ACT.sugEditClose = () => { S.sugEditing = null; renderSugList(); };
+ACT.sugPublish = async (b) => {
+  const x = sugById(b.dataset.id);
+  if (dirty()) { toast("You have unsaved changes in the editor. Save & publish or discard them first, then publish this suggestion.", "bad", 7000); return; }
+  if (S.sugEditing === x.id && $("#sugForm")) { if (!(await sugSaveEdit($("#sugForm")))) return; }
+  const fresh = sugById(b.dataset.id);
+  const dup = sugDup(fresh);
+  if (!(await confirmBox(`Publish “${fresh.item.name}”?`, `It will be added to ${catName(fresh)} and go live straight away${dup ? `. Note: the same URL is already listed as ${dup}` : ""}. A backup is made first and the change is synced to GitHub.`, "Publish", false))) return;
+  try {
+    const r = await api("POST", `/api/admin/submissions/${fresh.id}/publish`, { rev: S.saved.rev });
+    const syncRes = r.sync;
+    setSaved(r.catalog); S.subs = r.submissions; S.backups = null;
+    updateTopbar(); updateSugBadge(); renderSugList();
+    toast(`Published “${fresh.item.name}” (revision ${r.catalog.rev})`);
+    reportSync(syncRes);
+    render();
+  } catch (e) {
+    if (e.status === 409 && /changed/.test(e.message)) { toast("The catalog changed elsewhere. Reloading it; then publish again.", "bad", 6000); setSaved(await api("GET", "/api/admin/catalog")); render(); }
+    else toast(e.message, "bad", 6000);
+  }
+};
+ACT.sugReject = async (b) => {
+  const x = sugById(b.dataset.id), d = $("#rejectDlg");
+  $("#rejectName").textContent = `“${x.item.name}” will be moved to Rejected. It is not published, and you can move it back later.`;
+  $("#rejectReason").value = ""; d.returnValue = ""; d.showModal();
+  const ok = await new Promise((res) => d.addEventListener("close", () => res(d.returnValue === "ok"), { once: true }));
+  if (!ok) return;
+  try { S.subs = (await api("POST", `/api/admin/submissions/${x.id}/reject`, { reason: $("#rejectReason").value })).submissions; updateSugBadge(); render(); toast("Suggestion rejected"); }
+  catch (e) { toast(e.message, "bad"); }
+};
+ACT.sugReopen = async (b) => {
+  try { S.subs = (await api("POST", `/api/admin/submissions/${b.dataset.id}/reopen`)).submissions; updateSugBadge(); render(); toast("Moved back to pending"); }
+  catch (e) { toast(e.message, "bad"); }
+};
+ACT.sugDelete = async (b) => {
+  if (!(await confirmBox("Delete this record?", "The suggestion record is removed permanently. Published entries stay in the catalog.", "Delete"))) return;
+  try { S.subs = (await api("POST", `/api/admin/submissions/${b.dataset.id}/delete`)).submissions; render(); }
+  catch (e) { toast(e.message, "bad"); }
+};
+ACT.sugView = (b) => {
+  const x = sugById(b.dataset.id), c = S.draft.categories.find((c) => c.title === x.publishedCat) || S.draft.categories.find((c) => c.id === x.catId);
+  if (c) S.catId = c.id;
+  go("catalog");
+};
+setInterval(() => { if (S.draft && !$("#app").hidden && !document.hidden) loadSuggestions(true); }, 120000);
 
 /* =========================================================================
    security

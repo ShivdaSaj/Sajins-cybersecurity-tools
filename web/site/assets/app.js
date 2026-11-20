@@ -54,6 +54,7 @@ function applySettings() {
   $("legalText").textContent = s.legalText || "";
   $("stats").hidden = s.showStats === false;
   setOrbit(s.heroFx || "radar");
+  SUGGEST.setEnabled(s.submissionsEnabled !== false);
   renderFooter(s.footer);
 }
 
@@ -614,6 +615,78 @@ var STARS = (function () {
   };
 })();
 
+/* ---------------- suggest a tool (visitor submissions, reviewed in the admin panel) ---------------- */
+var SUGGEST = (function () {
+  var dlg = $("suggestDlg"), f = $("sgForm"), msg = $("sgMsg"), send = $("sgSend"), btn = $("suggestBtn");
+  var keyUrl = function (u) { return String(u || "").toLowerCase().replace(/^https?:\/\/(www\.)?/, "").replace(/[\/#?]+$/, ""); };
+  function say(kind, t) { msg.className = "sg-msg " + kind; msg.textContent = t; }
+  function open() {
+    if (!DB) return;
+    var sel = $("sgCat");
+    sel.textContent = "";
+    var ph = document.createElement("option"); ph.value = ""; ph.textContent = "Choose a category…"; sel.appendChild(ph);
+    DB.groups.forEach(function (g) {
+      var og = document.createElement("optgroup"); og.label = g.label;
+      DB.cats.filter(function (c) { return c.group === g.id; }).forEach(function (c) { var o = document.createElement("option"); o.value = c.id; o.textContent = c.title; og.appendChild(o); });
+      sel.appendChild(og);
+    });
+    var nw = document.createElement("option"); nw.value = "__new"; nw.textContent = "+ Suggest a new category…"; sel.appendChild(nw);
+    if (S.cat) { var cur = DB.cats.filter(function (c) { return c.slug === S.cat; })[0]; if (cur) sel.value = cur.id; }
+    var subs = {}; DB.items.forEach(function (i) { if (i.sub) subs[i.sub] = 1; });
+    $("sgSubs").innerHTML = Object.keys(subs).slice(0, 200).map(function (x) { return '<option value="' + esc(x) + '">'; }).join("");
+    $("sgNewWrap").hidden = sel.value !== "__new";
+    say("", ""); $("sgDup").textContent = "";
+    send.disabled = false; send.hidden = false; $("sgCancel").textContent = "Cancel";
+    f.querySelectorAll(".bad").forEach(function (e) { e.classList.remove("bad"); });
+    if (S.q && !f.name.value) f.name.value = S.q;
+    dlg.showModal();
+    setTimeout(function () { f.name.focus(); }, 30);
+  }
+  function close() { dlg.close(); }
+  btn.addEventListener("click", open);
+  $("sgClose").addEventListener("click", close);
+  $("sgCancel").addEventListener("click", close);
+  dlg.addEventListener("click", function (e) { if (e.target === dlg) close(); });
+  $("sgCat").addEventListener("change", function () { $("sgNewWrap").hidden = this.value !== "__new"; if (this.value === "__new") f.newCategory.focus(); });
+  f.addEventListener("input", function (e) { if (e.target.classList) e.target.classList.remove("bad"); });
+  f.url.addEventListener("input", function () {
+    var k = keyUrl(f.url.value), hit = k && DB.items.filter(function (i) { return keyUrl(i.url) === k; })[0];
+    $("sgDup").textContent = hit ? "Already listed as “" + hit.name + "” in " + hit.cat.title + "." : "";
+  });
+  f.addEventListener("submit", function (e) {
+    e.preventDefault();
+    f.querySelectorAll(".bad").forEach(function (x) { x.classList.remove("bad"); });
+    var bad = function (el, t) { el.classList.add("bad"); el.focus(); say("bad", t); };
+    var cat = f.catId.value, url = f.url.value.trim();
+    if (!f.name.value.trim()) return bad(f.name, "Please enter the tool's name.");
+    if (!cat) return bad(f.catId, "Please choose a category.");
+    if (cat === "__new" && !f.newCategory.value.trim()) return bad(f.newCategory, "Please name the new category.");
+    if (!/^https?:\/\/[^\s.]+\.[^\s]+$/i.test(url)) return bad(f.url, "Please enter the tool's website, starting with https://");
+    if ($("sgDup").textContent) return bad(f.url, $("sgDup").textContent);
+    var links = f.links.value.split(/\s+/).filter(Boolean);
+    if (links.some(function (l) { return !/^https?:\/\//i.test(l); })) return bad(f.links, "Extra links must start with https://");
+    if (f.email.value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.value.trim())) { f.querySelector("details").open = true; return bad(f.email, "That email address doesn't look right (it's optional)."); }
+    var body = {
+      name: f.name.value, catId: cat === "__new" ? "" : cat, newCategory: cat === "__new" ? f.newCategory.value : "",
+      url: url, desc: f.desc.value, lic: f.lic.value, sub: f.sub.value, links: links,
+      os: Array.prototype.map.call(f.querySelectorAll('input[name="os"]:checked'), function (x) { return x.value; }),
+      submitter: f.submitter.value, email: f.email.value, note: f.note.value, company: f.company.value,
+    };
+    if (new URLSearchParams(location.search).has("preview")) { say("ok", "Preview only: nothing was sent."); return; }
+    send.disabled = true; say("", "Sending…");
+    fetch("/api/suggest", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "X-Requested-With": "cst-admin" }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (r) {
+        if (!r.ok) { send.disabled = false; say("bad", (r.d && r.d.error) || "Something went wrong. Please try again."); return; }
+        f.reset(); $("sgNewWrap").hidden = true; $("sgDup").textContent = "";
+        say("ok", "Thanks! Your suggestion was sent for review. It will appear here once it's approved.");
+        send.hidden = true; $("sgCancel").textContent = "Close";
+      })
+      .catch(function () { send.disabled = false; say("bad", "Network error. Please try again."); });
+  });
+  return { setEnabled: function (on) { btn.hidden = !on; if (!on && dlg.open) dlg.close(); } };
+})();
+
 /* ---------------- footer ---------------- */
 var SOCIAL_ICON = { web: "i-globe", github: "i-gh" };
 function linkOk(u) { return typeof u === "string" && (/^https?:\/\//i.test(u) || /^mailto:/i.test(u) || /^\/(?!\/)/.test(u) || /^#/.test(u)) ? u : ""; }
@@ -1069,6 +1142,7 @@ addEventListener("message", function (e) {
   if (s.showStats !== undefined) $("stats").hidden = s.showStats === false;
   if (s.footer) renderFooter(s.footer);
   if (s.heroFx) setOrbit(s.heroFx);
+  if (s.submissionsEnabled !== undefined) SUGGEST.setEnabled(s.submissionsEnabled !== false);
   if (e.data.scrollFooter) {
     var n = 0, toEnd = function () { window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" }); if (++n < 4) requestAnimationFrame(toEnd); };
     toEnd();

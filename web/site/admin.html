@@ -31,6 +31,7 @@
     <nav id="nav">
       <button data-view="dashboard"><svg><use href="assets/icons.svg#c-radar"/></svg>Dashboard</button>
       <button data-view="catalog"><svg><use href="assets/icons.svg#c-layers"/></svg>Catalog editor</button>
+      <button data-view="suggestions"><svg><use href="assets/icons.svg#i-inbox"/></svg>Suggestions<span class="navbadge" id="sugBadge" hidden></span></button>
       <button data-view="import"><svg><use href="assets/icons.svg#i-dl"/></svg>Import / Export</button>
       <button data-view="ingest"><svg><use href="assets/icons.svg#c-search"/></svg>Ingest &amp; snippets</button>
       <button data-view="backups"><svg><use href="assets/icons.svg#c-box"/></svg>Backup &amp; restore</button>
@@ -95,6 +96,19 @@
     <div class="dlg-actions">
       <button class="btn" value="cancel">Cancel</button>
       <button class="btn danger" value="ok" id="confirmOk">Confirm</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- reject suggestion -->
+<dialog id="rejectDlg" class="dlg small">
+  <form method="dialog">
+    <h3>Reject suggestion</h3>
+    <p class="muted" id="rejectName"></p>
+    <label class="fld"><span>Reason (optional, for your records)</span><textarea id="rejectReason" rows="3" maxlength="300" placeholder="e.g. duplicate, not security-related, spam"></textarea></label>
+    <div class="dlg-actions">
+      <button class="btn" value="cancel">Cancel</button>
+      <button class="btn danger" value="ok">Reject</button>
     </div>
   </form>
 </dialog>

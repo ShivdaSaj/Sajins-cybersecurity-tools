@@ -390,6 +390,49 @@ body{transition:background-color .3s,color .3s}
 .orbit[data-fx="topology"] .o-ripple{inset:39%}
 .orbit[data-fx="constellation"] .o-core{inset:38%}
 @media (max-width:600px){.ot-body{font-size:11px;padding:10px 12px}.o-star{width:36px;height:36px;margin:-18px 0 0 -18px}.o-star img{width:20px;height:20px}.o-blip em{font-size:9.5px}}
+
+/* suggest a tool */
+.searchrow{display:flex;gap:10px;align-items:stretch;max-width:1010px;margin:0 auto}
+.searchrow .search{flex:1;min-width:0;max-width:none;margin:0}
+.suggest-btn{display:inline-flex;align-items:center;gap:8px;flex:none;padding:0 18px;border-radius:var(--r-lg);border:1px solid color-mix(in srgb,var(--accent) 50%,var(--line2));background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 18%,var(--panel-solid)),color-mix(in srgb,var(--accent2) 16%,var(--panel-solid)));color:var(--text);font-weight:600;font-size:14.5px;cursor:pointer;box-shadow:var(--shadow);transition:border-color .15s,transform .15s}
+.suggest-btn:hover{border-color:var(--accent);transform:translateY(-1px)}
+.suggest-btn[hidden]{display:none}
+.suggest-btn svg{width:18px;height:18px;color:var(--accent)}
+.sdlg{width:min(680px,calc(100vw - 24px));max-height:calc(100vh - 24px);padding:0;border:1px solid var(--line2);border-radius:calc(var(--r-lg) + 4px);background:var(--panel-solid);color:var(--text);box-shadow:0 40px 100px -30px rgba(0,0,0,.7)}
+.sdlg::backdrop{background:rgba(5,8,15,.55);backdrop-filter:blur(4px)}
+.sdlg form{padding:22px 24px 20px}
+.sg-head{display:flex;align-items:center;justify-content:space-between}
+.sg-head h2{margin:0;font-size:22px}
+.sg-x{border:0;background:none;font-size:26px;line-height:1;cursor:pointer;color:var(--muted)}
+.sg-lede{margin:6px 0 16px;color:var(--muted);font-size:14px}
+.sg-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px 16px}
+.sg-2{grid-column:1/-1}
+.sg-f[hidden]{display:none!important}
+.sg-f{display:flex;flex-direction:column;gap:6px;margin:0;min-width:0;border:0;padding:0}
+.sg-f>span,.sg-f legend{font-size:13.5px;font-weight:600;color:var(--muted);padding:0}
+.sg-f input,.sg-f select,.sg-f textarea{font:inherit;font-size:15px;color:var(--text);background:var(--bg2);border:1px solid var(--line2);border-radius:var(--r-sm);padding:10px 12px;width:100%;resize:vertical}
+.sg-f input:focus,.sg-f select:focus,.sg-f textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent)}
+.sg-f input.bad,.sg-f select.bad{border-color:var(--bad,#f55)}
+fieldset.sg-f{flex-direction:row;flex-wrap:wrap;gap:8px 22px;align-items:center}
+fieldset.sg-f legend{width:100%;margin-bottom:6px}
+.sg-c{display:inline-flex;gap:8px;align-items:center;font-size:15px;cursor:pointer}
+.sg-c input{width:17px;height:17px;accent-color:var(--accent)}
+.sg-hint{font-size:12.5px;color:var(--warn)}.sg-hint:empty{display:none}
+.sg-more{border:1px dashed var(--line2);border-radius:var(--r-sm);padding:10px 12px}
+.sg-more summary{cursor:pointer;font-size:13.5px;font-weight:600;color:var(--muted)}
+.sg-more .sg-grid{margin-top:12px}
+.sg-hp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+.sg-msg{margin:14px 0 0;font-size:14px}.sg-msg:empty{display:none}
+.sg-msg.ok{color:var(--good)}.sg-msg.bad{color:var(--bad,#f55)}
+.sg-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+.sg-btn{height:42px;padding:0 20px;border-radius:var(--r-sm);border:1px solid var(--line2);background:var(--panel);color:var(--text);font:inherit;font-size:15px;cursor:pointer}
+.sg-btn.primary{border:0;color:#fff;font-weight:700;background:linear-gradient(90deg,var(--accent2),var(--accent));text-shadow:0 1px 2px rgba(0,0,0,.3)}
+.sg-btn:disabled{opacity:.6;cursor:progress}
+@media (max-width:600px){
+  .suggest-btn{padding:0 14px}.suggest-btn span{display:none}
+  .sg-grid{grid-template-columns:minmax(0,1fr)}
+  .sdlg form{padding:18px 16px 16px}
+}
 </style>
 <style id="accentStyle">/*ACCENT*/</style>
 <script id="boot" type="application/json"><!--BOOT--></script>
@@ -478,11 +521,14 @@ body{transition:background-color .3s,color .3s}
   </section>
 
   <div class="searchbox">
+    <div class="searchrow">
     <div class="search" id="searchWrap">
       <svg class="mag" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></g></svg>
       <label for="q" class="sr">Search</label>
       <input id="q" type="search" autocomplete="off" spellcheck="false" placeholder="Search…">
       <div class="kbd"><kbd>/</kbd><button id="clear" aria-label="Clear search">✕</button></div>
+    </div>
+    <button class="suggest-btn" id="suggestBtn" type="button" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg><span>Suggest a tool</span></button>
     </div>
     <div class="filters">
       <div class="seg" role="group" aria-label="Section" id="fKind"></div>
@@ -546,6 +592,37 @@ body{transition:background-color .3s,color .3s}
     </div>
   </div>
 </footer>
+<dialog id="suggestDlg" class="sdlg" aria-labelledby="sgTitle">
+  <form id="sgForm" method="dialog" novalidate>
+    <div class="sg-head"><h2 id="sgTitle">Suggest a tool</h2><button type="button" class="sg-x" id="sgClose" aria-label="Close">×</button></div>
+    <p class="sg-lede">Know a tool or resource that belongs here? Send it in. Every suggestion is reviewed before it's published.</p>
+    <div class="sg-grid">
+      <label class="sg-f"><span>Name *</span><input name="name" required maxlength="120" autocomplete="off"></label>
+      <label class="sg-f"><span>Category *</span><select name="catId" id="sgCat"></select></label>
+      <label class="sg-f sg-2" id="sgNewWrap" hidden><span>New category name *</span><input name="newCategory" maxlength="80" placeholder="e.g. Email Security"></label>
+      <label class="sg-f sg-2"><span>URL *</span><input name="url" type="url" required placeholder="https://" maxlength="2000"><small class="sg-hint" id="sgDup"></small></label>
+      <label class="sg-f sg-2"><span>Description</span><textarea name="desc" rows="3" maxlength="1000" placeholder="What does it do, and why is it useful?"></textarea></label>
+      <label class="sg-f"><span>Licence</span><select name="lic"><option value="">Not sure</option><option value="F">Free / open source</option><option value="C">Commercial</option><option value="F/C">Free with paid tier</option></select></label>
+      <label class="sg-f"><span>Section (sub-heading)</span><input name="sub" maxlength="80" list="sgSubs"><datalist id="sgSubs"></datalist></label>
+      <fieldset class="sg-f sg-2"><legend>Platforms</legend>
+        <label class="sg-c"><input type="checkbox" name="os" value="Linux"> Linux</label>
+        <label class="sg-c"><input type="checkbox" name="os" value="macOS"> macOS</label>
+        <label class="sg-c"><input type="checkbox" name="os" value="Windows"> Windows</label>
+      </fieldset>
+      <label class="sg-f sg-2"><span>Extra links (one per line)</span><textarea name="links" rows="2" placeholder="https://docs.example.com"></textarea></label>
+      <details class="sg-2 sg-more"><summary>About you (optional)</summary>
+        <div class="sg-grid">
+          <label class="sg-f"><span>Your name</span><input name="submitter" maxlength="80" autocomplete="name"></label>
+          <label class="sg-f"><span>Email</span><input name="email" type="email" maxlength="200" autocomplete="email" placeholder="Only used about this suggestion"></label>
+          <label class="sg-f sg-2"><span>Note to the reviewer</span><textarea name="note" rows="2" maxlength="500"></textarea></label>
+        </div>
+      </details>
+      <input name="company" class="sg-hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+    </div>
+    <p class="sg-msg" id="sgMsg" role="status" aria-live="polite"></p>
+    <div class="sg-actions"><button type="button" class="sg-btn" id="sgCancel">Cancel</button><button type="submit" class="sg-btn primary" id="sgSend">Submit for review</button></div>
+  </form>
+</dialog>
 <button class="btn icon" id="totop" aria-label="Back to top">↑</button>
 </body>
 </html>

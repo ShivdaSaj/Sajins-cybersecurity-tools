@@ -129,6 +129,7 @@ export const DEFAULT_SETTINGS = {
   accent2: "#7c4dff",
   showStats: true,
   heroFx: "radar",
+  submissionsEnabled: true,
   showFavicons: true,
   clockEnabled: true,
   defaultTimezone: "",
