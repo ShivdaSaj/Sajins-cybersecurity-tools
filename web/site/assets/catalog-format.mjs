@@ -128,6 +128,7 @@ export const DEFAULT_SETTINGS = {
   accent: "#00f0ff",
   accent2: "#7c4dff",
   showStats: true,
+  heroFx: "radar",
   showFavicons: true,
   clockEnabled: true,
   defaultTimezone: "",

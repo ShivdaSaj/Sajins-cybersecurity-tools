@@ -285,6 +285,77 @@ body{transition:background-color .3s,color .3s}
 .sfoot .dl svg{width:13px;height:13px}
 @media (max-width: 760px){.clock .cd{display:none}}
 @media (max-width: 420px){.clock{padding:0 9px;gap:7px}.clock svg{display:none}.brand{font-size:14px;gap:8px}.brand>span{max-width:128px;white-space:nowrap}.bar{gap:8px}}
+
+/* hero orbit animation */
+.hero.split{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr);gap:28px 48px;align-items:center;text-align:left;padding-top:40px}
+.hero.split .hero-copy h1{margin:18px 0 14px;font-size:clamp(34px,4.4vw,62px)}
+.hero.split .lede{margin:0;max-width:620px}
+.hero.split .stats{justify-content:flex-start}
+.hero.split .notice{grid-column:1/-1}
+.orbit{--T:9s;position:relative;width:min(100%,520px);aspect-ratio:1;justify-self:center;margin:0 auto;isolation:isolate}
+.orbit[hidden]{display:none}
+.o-ring{position:absolute;border-radius:50%;border:1px solid color-mix(in srgb,var(--accent) 28%,var(--line2));pointer-events:none}
+.o-r1{inset:6%;background:radial-gradient(circle,transparent 60%,color-mix(in srgb,var(--accent) 5%,transparent))}
+.o-r2{inset:18%;border-style:dashed;border-color:color-mix(in srgb,var(--accent2) 40%,var(--line2));animation:o-spin 60s linear infinite reverse}
+.o-r3{inset:31%;border-color:color-mix(in srgb,var(--accent) 22%,var(--line))}
+.o-sweep{position:absolute;inset:6%;border-radius:50%;background:conic-gradient(from 0deg,transparent 0 270deg,color-mix(in srgb,var(--accent) 6%,transparent) 300deg,color-mix(in srgb,var(--accent) 42%,transparent) 359deg,transparent 360deg);-webkit-mask:radial-gradient(circle,transparent 18%,#000 19%);mask:radial-gradient(circle,transparent 18%,#000 19%);animation:o-spin var(--T) linear infinite;pointer-events:none}
+.o-links{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+.o-links line{stroke:color-mix(in srgb,var(--accent) 30%,transparent);stroke-width:1;vector-effect:non-scaling-stroke}
+.o-links line.flow{stroke:var(--accent);stroke-dasharray:2 10;stroke-linecap:round;stroke-width:2;animation:o-flow 2.4s linear infinite;opacity:.8}
+.o-sat{position:absolute;border-radius:50%;animation:o-spin 14s linear infinite;pointer-events:none}
+.o-sat i{position:absolute;top:0;left:50%;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px 2px var(--accent)}
+.o-s1{inset:6%}
+.o-s2{inset:18%;animation-duration:22s;animation-direction:reverse}.o-s2 i{background:var(--accent2);box-shadow:0 0 12px 2px var(--accent2)}
+.o-s3{inset:31%;animation-duration:10s;animation-delay:-4s}.o-s3 i{width:6px;height:6px;margin:-3px 0 0 -3px;background:var(--accent3,var(--accent));box-shadow:0 0 10px 2px var(--accent3,var(--accent))}
+.o-ripple{position:absolute;inset:35%;border-radius:50%;border:2px solid color-mix(in srgb,var(--accent) 55%,transparent);opacity:0;animation:o-ripple 3.6s cubic-bezier(.2,.6,.3,1) infinite;pointer-events:none}
+.o-ripple.o-d2{animation-delay:1.2s}.o-ripple.o-d3{animation-delay:2.4s}
+.o-core{position:absolute;z-index:2;inset:35%;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-align:center;background:radial-gradient(circle at 50% 35%,color-mix(in srgb,var(--accent) 22%,var(--panel-solid)),var(--panel-solid) 70%);border:1px solid color-mix(in srgb,var(--accent) 45%,transparent);box-shadow:0 0 0 8px color-mix(in srgb,var(--accent) 6%,transparent),0 0 60px -6px color-mix(in srgb,var(--accent) 60%,transparent),inset 0 0 30px -10px var(--accent);animation:o-breathe 3.6s ease-in-out infinite}
+.o-core b{font:800 clamp(30px,4.2vw,50px)/1 var(--sans);letter-spacing:-1.5px;color:var(--text);font-variant-numeric:tabular-nums}
+.o-core span{font:600 10.5px/1.2 var(--mono);letter-spacing:2.4px;text-transform:uppercase;color:var(--muted);max-width:80%}
+.o-pulse{width:52%;height:auto;margin:4px 0 2px;overflow:visible}
+.o-pulse path.base{stroke-dasharray:none;animation:none;opacity:.22;filter:none}
+.o-pulse path{fill:none;stroke:var(--accent);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:90;stroke-dashoffset:90;filter:drop-shadow(0 0 3px var(--accent));animation:o-ecg 2.4s ease-in-out infinite}
+.o-chips{position:absolute;inset:0}
+.o-chip{position:absolute;transform:translate(-50%,-50%);z-index:2;border:0;background:none;padding:0;cursor:pointer;color:var(--text)}
+.o-chip>span{display:inline-flex;align-items:center;gap:8px;max-width:170px;padding:8px 13px;border-radius:999px;border:1px solid var(--line2);background:color-mix(in srgb,var(--panel-solid) 88%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);font-size:13.5px;font-weight:600;white-space:nowrap;box-shadow:0 8px 24px -14px rgba(0,0,0,.5);animation:o-float 6s ease-in-out infinite,o-lit var(--T) linear infinite;animation-delay:var(--fd,0s),var(--ld,0s);transition:border-color .2s,transform .2s}
+.o-chip>span>em{font-style:normal;overflow:hidden;text-overflow:ellipsis}
+.o-chip i{width:8px;height:8px;flex:none;border-radius:50%;background:hsl(var(--h) 90% 60%);box-shadow:0 0 10px hsl(var(--h) 90% 60%)}
+:root[data-mode="light"] .o-chip i{background:hsl(var(--h) 75% 45%);box-shadow:0 0 8px hsl(var(--h) 75% 50% / .6)}
+.o-chip small{font:600 11px var(--mono);color:var(--dim)}
+.o-chip:hover>span,.o-chip:focus-visible>span{border-color:var(--accent);animation-play-state:paused}
+.orbit.paused *,.orbit.paused *>span{animation-play-state:paused!important}
+.o-cv{position:absolute;inset:-6%;width:112%;height:112%;display:none;pointer-events:none}
+.orbit:not([data-fx="radar"]) .o-cv{display:block}
+.orbit:not([data-fx="radar"]) :is(.o-ring,.o-sweep,.o-sat,.o-links){display:none}
+.orbit:not([data-fx="radar"]) .o-chip>span{animation:o-float 6s ease-in-out infinite;animation-delay:var(--fd,0s)}
+.orbit:is([data-fx="globe"],[data-fx="waves"]) .o-chip{transition:opacity .2s}
+.orbit:is([data-fx="globe"],[data-fx="waves"]) .o-chip>span{animation:none}
+.orbit[data-fx="globe"] .o-core{inset:39%;background:radial-gradient(circle,color-mix(in srgb,var(--panel-solid) 82%,transparent),color-mix(in srgb,var(--panel-solid) 55%,transparent) 70%);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+.orbit[data-fx="globe"] .o-ripple{inset:39%}
+.orbit[data-fx="waves"] .o-ripple{display:none}
+.orbit[data-fx="waves"] .o-core{inset:36%}
+.orbit[data-fx="shield"] .o-core{inset:37% 37% 33%;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--panel-solid) 70%,transparent),transparent 72%);border-color:transparent;box-shadow:none;animation:none}
+.orbit[data-fx="shield"] .o-ripple{inset:37% 37% 33%}
+@keyframes o-spin{to{transform:rotate(360deg)}}
+@keyframes o-flow{to{stroke-dashoffset:-48}}
+@keyframes o-ripple{0%{transform:scale(.95);opacity:.75}100%{transform:scale(2.6);opacity:0}}
+@keyframes o-breathe{50%{box-shadow:0 0 0 14px color-mix(in srgb,var(--accent) 4%,transparent),0 0 80px -4px color-mix(in srgb,var(--accent) 70%,transparent),inset 0 0 36px -10px var(--accent)}}
+@keyframes o-ecg{0%{stroke-dashoffset:90}55%{stroke-dashoffset:0}100%{stroke-dashoffset:-90}}
+@keyframes o-float{50%{transform:translateY(-6px)}}
+@keyframes o-lit{0%{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 20%,transparent),0 0 26px -4px var(--accent)}14%{border-color:var(--line2);box-shadow:0 8px 24px -14px rgba(0,0,0,.5)}}
+@media (max-width:1080px){
+  .hero.split{grid-template-columns:minmax(0,1fr);text-align:center;gap:10px}
+  .hero.split .hero-copy h1{margin:18px auto 12px}
+  .hero.split .lede{margin:0 auto}
+  .hero.split .stats{justify-content:center}
+  .orbit{width:min(100%,440px);margin-top:6px}
+}
+@media (max-width:600px){
+  .orbit{width:min(86%,340px)}
+  .o-chip>span{font-size:11.5px;padding:6px 10px;gap:6px;max-width:118px}
+  .o-chip small{display:none}
+  .o-core span{font-size:9px;letter-spacing:1.6px}
+}
 </style>
 <style id="accentStyle">/*ACCENT*/</style>
 <script id="boot" type="application/json"><!--BOOT--></script>
@@ -332,15 +403,35 @@ body{transition:background-color .3s,color .3s}
 </header>
 
 <main class="wrap">
-  <section class="hero">
-    <span class="eyebrow"><i></i><span id="eyebrow"></span></span>
-    <h1 id="heroTitle"></h1>
-    <p class="lede" id="heroText"></p>
-    <div class="stats" id="stats">
-      <div class="stat"><b id="sTotal">—</b><span>Entries</span></div>
-      <div class="stat"><b id="sTools">—</b><span id="sToolsL">Tools</span></div>
-      <div class="stat"><b id="sCats">—</b><span>Categories</span></div>
-      <div class="stat"><b id="sFree">—</b><span>Free / OSS</span></div>
+  <section class="hero" id="hero">
+    <div class="hero-copy">
+      <span class="eyebrow"><i></i><span id="eyebrow"></span></span>
+      <h1 id="heroTitle"></h1>
+      <p class="lede" id="heroText"></p>
+      <div class="stats" id="stats">
+        <div class="stat"><b id="sTotal">—</b><span>Entries</span></div>
+        <div class="stat"><b id="sTools">—</b><span id="sToolsL">Tools</span></div>
+        <div class="stat"><b id="sCats">—</b><span>Categories</span></div>
+        <div class="stat"><b id="sFree">—</b><span>Free / OSS</span></div>
+      </div>
+    </div>
+    <div class="orbit" id="orbit" hidden>
+      <canvas class="o-cv" id="oCv" aria-hidden="true"></canvas>
+      <div class="o-ring o-r1" aria-hidden="true"></div>
+      <div class="o-ring o-r2" aria-hidden="true"></div>
+      <div class="o-ring o-r3" aria-hidden="true"></div>
+      <div class="o-sweep" aria-hidden="true"></div>
+      <svg class="o-links" id="oLinks" viewBox="0 0 100 100" aria-hidden="true"></svg>
+      <div class="o-sat o-s1" aria-hidden="true"><i></i></div>
+      <div class="o-sat o-s2" aria-hidden="true"><i></i></div>
+      <div class="o-sat o-s3" aria-hidden="true"><i></i></div>
+      <div class="o-ripple" aria-hidden="true"></div><div class="o-ripple o-d2" aria-hidden="true"></div><div class="o-ripple o-d3" aria-hidden="true"></div>
+      <div class="o-core">
+        <b id="oCount">0</b>
+        <svg class="o-pulse" viewBox="0 0 60 16" aria-hidden="true"><path class="base" d="M0 8h17l3-6 4 12 4-9 2 3h30"/><path d="M0 8h17l3-6 4 12 4-9 2 3h30"/></svg>
+        <span id="oLabel">entries indexed</span>
+      </div>
+      <div class="o-chips" id="oChips"></div>
     </div>
     <div class="notice" id="legal" hidden>
       <svg viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M12 3l10 18H2zM12 10v5M12 18h.01"/></svg>

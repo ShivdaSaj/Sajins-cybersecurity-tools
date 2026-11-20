@@ -1213,6 +1213,7 @@ function renderThemeBody() {
     <label class="fld"><span>Card style</span><select data-set="cardStyle">${opt("cardStyle")}</select></label>
     <label class="fld"><span>Layout density</span><select data-set="density">${opt("density")}</select></label>
     <label class="fld"><span>Background effect</span><select data-set="bgEffect">${opt("bgEffect")}</select></label>
+    <label class="fld"><span>Hero animation (right side)</span><select data-set="heroFx">${opt("heroFx")}</select></label>
     <div class="fld"><span>Extras</span><div style="display:flex;flex-direction:column;gap:6px">${setField("glow", "Colour glow blobs", "check")}${setField("showFavicons", "Tool icons (favicons)", "check")}${setField("showStats", "Statistics tiles", "check")}</div></div>
   </div></div>
   <div class="panel"><h3>Custom accent colours</h3><p class="muted">Override the selected theme's accent colours with your brand colours. Check that text stays readable in both light and dark themes.</p>

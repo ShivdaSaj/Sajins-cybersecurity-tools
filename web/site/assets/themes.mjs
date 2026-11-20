@@ -83,6 +83,7 @@ export const APPEARANCE_OPTIONS = {
   radius: [["sharp", "Sharp"], ["default", "Rounded"], ["round", "Extra round"]],
   cardStyle: [["glass", "Glass (translucent)"], ["solid", "Solid"], ["outline", "Outline"], ["elevated", "Elevated (shadow)"]],
   density: [["comfortable", "Comfortable"], ["compact", "Compact"]],
+  heroFx: [["radar", "Orbital radar"], ["globe", "Particle globe"], ["waves", "Signal waves"], ["shield", "Cyber shield"], ["none", "None (centred text)"]],
   bgEffect: [["theme", "Theme default"], ["network", "Network nodes"], ["matrix", "Falling code"], ["grid", "Cyber grid"], ["stars", "Starfield"], ["none", "None"]],
 };
 
